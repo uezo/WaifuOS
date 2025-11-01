@@ -85,15 +85,6 @@ Follow the steps below after cloning the repository with `git clone https://gith
     ========================================
     WAIFU CREATOR
     ========================================
-    Character Name: みうな
-    Character Description: ユーザーの幼馴染。関心がないように見せかけて、実はいつも気にかけている
-    More Description? (Blank to finish): しっかりもの。物静かな方
-    More Description? (Blank to finish): 銀髪、ライトグリーンの瞳
-    More Description? (Blank to finish): ふんわりボブ
-    More Description? (Blank to finish): 
-    Character Voice Service (Blank to use default): voicevox
-    Character Voice Speaker (Blank to use default): 46
-    ========================================
     Character Name: とうか
     Character Description:
 
@@ -104,7 +95,7 @@ Follow the steps below after cloning the repository with `git clone https://gith
     Character Voice Service: voicevox
     Character Voice Speaker: 46
 
-    Are you sure to create 'みうな'? (y/n): y
+    Are you sure to create 'とうか'? (y/n): y
 
     Creating your waifu...
     ✅ Character Prompt   
@@ -178,6 +169,32 @@ NOTE: Daily plan is automatically updated every day based on the weekly plan.
 | `LOG_LEVEL` | string | `WARNING` | Root logger verbosity for the CLI process. |
 
 *Booleans accept `1`, `true`, `yes`, or `on` (case-insensitive) as truthy values.
+
+
+## 🧩 API Reference
+
+**WaifuOS** provides a **streaming API** similar to OpenAI’s — supporting **Server-Sent Events (SSE)** for seamless **STT → LLM → TTS** cascades — and a **realtime WebSocket API** for **speech-to-speech** interactions.
+
+These APIs allow you to connect **any frontend or communication channel** — from web apps to custom clients — to your waifu’s intelligence.
+
+We’re preparing **detailed documentation, practical examples**, and **integration guides** for connecting with:
+
+- [**ChatdollKit**](https://github.com/uezo/ChatdollKit), the 3D avatar framework for real-time voice interaction
+- **LINE Bot**, for conversational experiences on mobile
+
+Together, these make it easy to build **voice-interactive, emotionally responsive avatars** powered by WaifuOS.
+
+The API specifications conform to **AIAvatarKit** — please refer to the following for details:
+
+- **RESTful API:** [https://github.com/uezo/aiavatarkit?tab=readme-ov-file#-restful-api-sse](https://github.com/uezo/aiavatarkit?tab=readme-ov-file#-restful-api-sse)
+- **WebSocket API:** [https://github.com/uezo/aiavatarkit?tab=readme-ov-file#-websocket](https://github.com/uezo/aiavatarkit?tab=readme-ov-file#-websocket)
+
+You can also view and test the API documentation at:
+👉 [http://localhost:8012/aiavatar/docs](http://localhost:8012/aiavatar/docs)
+
+> **NOTE:**
+> WaifuOS’s RESTful API does **not** include audio data in responses from the `/api/chat` endpoint.
+> To generate audio, use the `voice_text` field from each response chunk and send it to the `/api/synthesize` endpoint for speech synthesis.
 
 
 ## ⚖️ License
