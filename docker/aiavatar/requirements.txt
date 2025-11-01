@@ -1,0 +1,11 @@
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0
+silero-vad>=6.0.0
+fastapi>=0.115.9
+sse-starlette>=2.2.1
+python-multipart>=0.0.20
+uvicorn>=0.34.0
+websockets>=14.2
+aiavatar>=0.7.16
+APScheduler==3.11.0
+jpholiday

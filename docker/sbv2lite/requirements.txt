@@ -1,0 +1,6 @@
+fastapi
+python-multipart
+uvicorn
+numpy==1.26.4
+style-bert-vits2==2.5.0
+python-dotenv==1.0.0

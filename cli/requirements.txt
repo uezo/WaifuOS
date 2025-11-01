@@ -1,0 +1,4 @@
+# CLI
+python-dotenv==1.0.0
+httpx
+pillow==11.1.0

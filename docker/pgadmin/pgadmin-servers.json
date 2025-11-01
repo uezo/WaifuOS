@@ -1,0 +1,13 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "waifuos",
+            "Group": "Servers",
+            "Host": "waifuos-db",
+            "Port": 5432,
+            "MaintenanceDB": "postgres",
+            "Username": "postgres",
+            "SSLMode": "prefer"
+        }
+    }
+}

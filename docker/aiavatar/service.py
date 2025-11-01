@@ -1,0 +1,198 @@
+import base64
+import logging
+from pathlib import Path
+from typing import AsyncGenerator
+from uuid import uuid4
+import openai
+from entities import UserRepository, WaifuRepository, Waifu
+from prompt import PromptBuilder
+
+logger = logging.getLogger(__name__)
+
+
+class WaifuService:
+    IMAGE_GENERATION_PROMPT_GENERATION_PROMPT = """与えられたキャラクター設定に相応しいSNSアイコン画像を生成するための生成AI用のプロンプトを出力してください。
+
+- 日本のアニメキャラクターの作風とする
+- 色温度は5500K
+- Sexualなモデレーションに抵触する用語の出力を禁止
+- 出力内容をそのまま画像生成AIに入力するため、プロンプト部分のみを出力すること。言語は英語とする
+"""
+
+    def __init__(
+        self,
+        *,
+        data_dir: str,
+        waifu_repo: WaifuRepository,
+        user_repo: UserRepository,
+        prompt_builder: PromptBuilder,
+        openai_api_key: str,
+        openai_model: str,
+        openai_reasoning_effort: str,
+        timezone: str
+    ):
+        self.data_dir = data_dir
+        self.waifu_repo = waifu_repo
+        self.current_waifu = waifu_repo.get_waifu()
+        self.user_repo = user_repo
+        self.prompt_builder = prompt_builder
+        self.client = openai.AsyncClient(api_key=openai_api_key, timeout=120.0)
+        self.openai_model = openai_model
+        self.openai_reasoning_effort = openai_reasoning_effort
+        self.timezone = timezone
+
+        self._on_waifu_activated: callable = None
+
+    async def generate_image(self, character_prompt: str, additional_info: str):
+        image_generation_prompt = None
+        image_bytes = None
+
+        # Make prompt to generate image
+        user_content = additional_info + "\n\n" + character_prompt if character_prompt else character_prompt
+        prompt_resp = await self.client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": self.IMAGE_GENERATION_PROMPT_GENERATION_PROMPT},
+                {"role": "user", "content": user_content}
+            ],
+            model=self.openai_model,
+            reasoning_effort=self.openai_reasoning_effort or openai.NOT_GIVEN
+        )
+        image_generation_prompt = prompt_resp.choices[0].message.content
+        logger.info(f"Image generation prompt: {image_generation_prompt}")
+
+        # Generate image
+        resp = await self.client.images.generate(
+            model="gpt-image-1",
+            prompt=image_generation_prompt,
+            size="1024x1024"
+        )
+        image_base64 = resp.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
+
+        return image_generation_prompt, image_bytes
+
+    def get_image(self, waifu_id: str):
+        with open(f"{self.data_dir}/waifus/{waifu_id}/icon.png", "rb") as f:
+            character_image_bytes = f.read()
+        return character_image_bytes
+
+    async def create(
+        self,
+        *,
+        character_name: str,
+        character_description: str,
+        speech_service: str,
+        speaker: str
+    ) -> AsyncGenerator:
+        waifu_id = f"waifu_{uuid4()}"
+        progress = ""
+
+        try:
+            progress = "initializing"
+
+            # Create waifu asset dir
+            waifu_dir_path = Path(f"{self.data_dir}/waifus/{waifu_id}")
+            waifu_dir_path.mkdir(parents=True, exist_ok=True)
+
+            # Generate prompts
+            progress = "creating character prompt"
+            character_prompt = await self.prompt_builder.generate_character_prompt(
+                waifu_id=waifu_id,
+                character_name=character_name,
+                character_description=character_description
+            )
+            yield character_prompt, "character_prompt"
+
+            progress = "creating weekly plan"
+            weekly_plan_prompt = await self.prompt_builder.generate_weekly_plan_prompt(
+                waifu_id=waifu_id,
+                character_prompt=character_prompt
+            )
+            yield weekly_plan_prompt, "weekly_plan_prompt"
+
+            progress = "creating daily plan"
+            daily_plan_prompt = await self.prompt_builder.generate_daily_plan_prompt(
+                waifu_id=waifu_id,
+                character_prompt=character_prompt,
+                weekly_plan_prompt=weekly_plan_prompt
+            )
+            yield daily_plan_prompt, "daily_plan_prompt"
+
+            # Generate image
+            progress = "creating icon image"
+            image_generation_prompt, image_bytes = await self.generate_image(
+                character_prompt,
+                additional_info=""
+            )
+            if image_bytes:
+                with open(waifu_dir_path / "icon.png", "wb") as f:
+                    f.write(image_bytes)
+                    yield image_bytes, "image_bytes"
+
+            # Update database
+            progress = "activating waifu"
+            self.waifu_repo.update_waifu(
+                waifu_id=waifu_id,
+                waifu_name=character_name,
+                is_active=False,
+                speech_service=speech_service,
+                speaker=speaker
+            )
+
+            # Activate
+            yield await self.activate(waifu_id=waifu_id), "final"
+
+        except Exception as ex:
+            logger.exception(f"Error in creating waifu: progress={progress}")
+            yield f"Error in creating waifu: progress={progress}", "error"
+
+    async def activate(self, waifu_id: str) -> Waifu:
+        waifu = self.waifu_repo.get_waifu(waifu_id=waifu_id)
+        if not waifu:
+            raise Exception(f"waifu not found: waifu_id={waifu_id}")
+
+        # Make today's plan prompt if too old
+        if self.prompt_builder.is_daily_plan_prompt_expired(waifu_id=waifu.waifu_id):
+            await self.prompt_builder.generate_daily_plan_prompt(
+                waifu_id=waifu.waifu_id,
+                character_prompt=self.character_prompt,
+                weekly_plan_prompt=self.weekly_plan_prompt
+            )
+
+        # Activate
+        activated_waifu = self.waifu_repo.update_waifu(
+            waifu_id=waifu.waifu_id,
+            is_active=True
+        )
+
+        # Change current waifu
+        waifu.is_active = True
+        self.current_waifu = waifu
+
+        if self._on_waifu_activated:
+            await self._on_waifu_activated(activated_waifu)
+
+        return activated_waifu
+
+    @property
+    def character_prompt(self) -> str:
+        return self.prompt_builder.get_character_prompt(self.current_waifu.waifu_id)
+
+    @property
+    def weekly_plan_prompt(self) -> str:
+        return self.prompt_builder.get_weekly_plan_prompt(self.current_waifu.waifu_id)
+
+    @property
+    def daily_plan_prompt(self) -> str:
+        return self.prompt_builder.get_daily_plan_prompt(self.current_waifu.waifu_id)
+
+    @property
+    def image(self) -> bytes:
+        return self.get_image(self.current_waifu.waifu_id)
+
+    def get_system_prompt(self, context_id: str, user_id: str, system_prompt_params: dict) -> str:
+        user = self.user_repo.get_user(user_id=user_id, waifu_id=self.current_waifu.waifu_id)
+        return self.prompt_builder.get_system_prompt(
+            waifu_id=self.current_waifu.waifu_id,
+            system_prompt_params={"user_name": user.user_name or "User", "relation": user.relation or "unknown"}
+        )
