@@ -82,20 +82,29 @@ Follow the steps below after cloning the repository with `git clone https://gith
     Example:
 
     ```sh
+    $ waifu create
     ========================================
     WAIFU CREATOR
     ========================================
-    Character Name: とうか
+    Character Name: いすず
+    Character Description: 三毛猫タイプの招き猫の化身の美少女
+    More Description? (Blank to finish): 見た目は16歳くらいだが実年齢は数百年以上
+    More Description? (Blank to finish): 基本的に語尾は「じゃ」だが、興奮すると猫っぽく「にゃ」の語尾が混ざる
+    More Description? (Blank to finish): 普段は気分屋でおっちょこちょいにも見えるが、本質的には聡明で誠実
+    More Description? (Blank to finish): 
+    Character Voice Service (Blank to use default): voicevox
+    Character Voice Speaker (Blank to use default): 46
+    ========================================
+    Character Name: いすず
     Character Description:
-
-    - ユーザーの幼馴染。関心がないように見せかけて、実はいつも気にかけている
-    - しっかりもの。物静かな方
-    - 銀髪、水色の瞳
-    - ふんわりボブ
+    - 三毛猫タイプの招き猫の化身の美少女
+    - 見た目は16歳くらいだが実年齢は数百年以上
+    - 基本的に語尾は「じゃ」だが、興奮すると猫っぽく「にゃ」の語尾が混ざる
+    - 普段は気分屋でおっちょこちょいにも見えるが、本質的には聡明で誠実
     Character Voice Service: voicevox
     Character Voice Speaker: 46
 
-    Are you sure to create 'とうか'? (y/n): y
+    Are you sure to create 'いすず'? (y/n): y
 
     Creating your waifu...
     ✅ Character Prompt   
@@ -103,9 +112,9 @@ Follow the steps below after cloning the repository with `git clone https://gith
     ✅ Today's Activity Prompt   
     ✅ Icon Image   
     ========================================
-    💍 Your waifu 'とうか' is ready!
+    💍 Your waifu 'いすず' is ready!
 
-    Run 'waifu' to start chatting with とうか.
+    Run 'waifu' to start chatting with いすず.
     ========================================
     ```
 
@@ -118,21 +127,23 @@ Follow the steps below after cloning the repository with `git clone https://gith
     Your waifu will first ask for your name and how you’re related, so be sure to answer. Every conversation afterward reflects that setting.
 
     ```sh
-    とうか: ごめん、急に飛んじゃって…。Userの名前と、私との関係、もう一度教えて。
-    User: うえぞうだよ。幼馴染じゃん
-    とうか: [Processing update_userinfo ...]
+    いすず: あっ、うっかりしたにゃ。User、名とわらわとの関係を教えてくれぬか？
+    User: うえぞうだよ。 きみのあるじだ
+    いすず: [Processing update_userinfo ...]
     [Finish update_userinfo !]
-    そっか、うえぞうね。思い出した、ごめん。
+    (^o^) うえぞう殿、主であらせられるのじゃな。しかと心得たぞ。
+    うえぞう: おう、よろしくね！
+    いすず: (^o^) 任せるのじゃ、主うえぞう殿。今日も福を呼ぶぞにゃ。
     ```
 
     To start a voice chat in the browser, run `waifu browser` after you set your name and relationship in the CLI.
 
     NOTE: You can pass the user ID from the CLI to the browser, but sending it the other way requires manually editing the configuration file. The CLI configuration file lives at `~/.waifucli/default.env`.
 
+For details on using and configuring the CLI, refer to the [WaifuOS CLI documentation](./cli/README.md) .
+
 
 ## 🛠️ Customize
-
-### Character settings
 
 You can customize your waifu by editting files in `{DATA_DIR}/aiavatar/waifus/{waifu_id}`
 
@@ -141,34 +152,6 @@ You can customize your waifu by editting files in `{DATA_DIR}/aiavatar/waifus/{w
 - Icon image: icon.png
 
 NOTE: Daily plan is automatically updated every day based on the weekly plan.
-
-### CLI settings
-
-| Environment variable | Type | Default | Description |
-| --- | --- | --- | --- |
-| `BASE_URL` | string (URL) | `http://127.0.0.1:8012/aiavatar/api` | API endpoint the CLI calls for WaifuOS services. |
-| `API_KEY` | string | *(unset)* | API key attached to outbound requests when required by the server. |
-| `USER_ID` | string | *(unset)* | Pre-selects the WaifuOS user profile and is reused by the `waifu browser` helper. |
-| `ON_START_MESSAGE_PROMPT` | string | *(unset)* | Custom system prompt that is sent once when the session boots. |
-| `TIMEZONE` | string (IANA name) | `Asia/Tokyo` | Local timezone used when timestamping or formatting schedule data. |
-| `CHARACTER_VOICE_ENABLED` | boolean | `true` | Toggles audio playback for the character voice responses. |
-| `FACES` | JSON object | built-in faces | Overrides the ASCII facial expressions mapped by sentiment. |
-| `CHARACTER_INTERVAL` | float seconds | `0.02` | Delay between characters when printing messages (typing speed). |
-| `ICON_WIDTH_RATIO` | float | `0.5` | Max icon width relative to terminal columns. |
-| `ICON_MAX_WIDTH` | integer columns | `40` | Hard cap for icon width in columns. |
-| `ICON_MIN_WIDTH` | integer columns | `20` | Minimum icon width to avoid overly small renders. |
-| `ICON_ASPECT_RATIO` | float | `1.0` | Aspect ratio clamp applied when scaling icons. |
-| `USE_TRUECOLOR` | boolean | `false`* | Forces 24-bit color output; auto-enabled when `COLORTERM=truecolor`. |
-| `WAIFU_LABEL_COLOR` | ANSI escape | `\033[38;2;255;64;160m` | ANSI color code for the Waifu speaker label. |
-| `USER_LABEL_COLOR` | ANSI escape | `\033[38;2;80;200;120m` | ANSI color code for the user speaker label. |
-| `FACE_COLOR` | ANSI escape | `\033[38;2;255;224;243m` | ANSI color code for facial expression text. |
-| `TIMEOUT` | float seconds | `60.0` | Request timeout applied to the HTTP client. |
-| `OUTPUT_DEVICE_INDEX` | integer | `-1` | Audio output device to select (system dependent). |
-| `OUTPUT_CHUNK_SIZE` | integer bytes | `1024` | Size of audio chunks handed to the player. |
-| `DEBUG` | boolean | `false` | Enables extra logging and diagnostic output from the CLI. |
-| `LOG_LEVEL` | string | `WARNING` | Root logger verbosity for the CLI process. |
-
-*Booleans accept `1`, `true`, `yes`, or `on` (case-insensitive) as truthy values.
 
 
 ## 🧩 API Reference
