@@ -1,4 +1,6 @@
 import base64
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import logging
 from pathlib import Path
 from typing import AsyncGenerator
@@ -136,7 +138,9 @@ class WaifuService:
                 waifu_name=character_name,
                 is_active=False,
                 speech_service=speech_service,
-                speaker=speaker
+                speaker=speaker,
+                birthday_mmdd=datetime.now(ZoneInfo(self.timezone)).strftime("%m%d"),
+                metadata={}
             )
 
             # Activate

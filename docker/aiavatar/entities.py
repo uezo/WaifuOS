@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -20,6 +21,8 @@ class Waifu(BaseModel):
     speech_service: Optional[str] = None
     speaker: Optional[str] = None
     shared_context_id: str
+    birthday_mmdd: Optional[str] = None
+    metadata: Optional[dict] = None
 
 
 class Context(BaseModel):
@@ -128,10 +131,17 @@ class WaifuRepository:
                     is_active INTEGER NOT NULL DEFAULT 0,
                     speech_service TEXT,
                     speaker TEXT,
-                    shared_context_id TEXT
+                    shared_context_id TEXT,
+                    birthday_mmdd TEXT,
+                    metadata TEXT
                 )
                 """
             )
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(waifus)").fetchall()}
+            if "birthday_mmdd" not in columns:
+                conn.execute("ALTER TABLE waifus ADD COLUMN birthday_mmdd TEXT")
+            if "metadata" not in columns:
+                conn.execute("ALTER TABLE waifus ADD COLUMN metadata TEXT")
             conn.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_waifus_active
@@ -146,7 +156,7 @@ class WaifuRepository:
             if waifu_id:
                 row = conn.execute(
                     """
-                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id
+                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id, birthday_mmdd, metadata
                     FROM waifus
                     WHERE waifu_id = ?
                     """,
@@ -155,7 +165,7 @@ class WaifuRepository:
             else:
                 row = conn.execute(
                     """
-                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id
+                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id, birthday_mmdd, metadata
                     FROM waifus
                     WHERE is_active = 1
                     ORDER BY updated_at DESC
@@ -173,12 +183,14 @@ class WaifuRepository:
             speech_service=row["speech_service"],
             speaker=row["speaker"],
             shared_context_id=row["shared_context_id"],
+            birthday_mmdd=row["birthday_mmdd"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else None,
         )
 
     def get_waifus(self) -> List[Waifu]:
         with self.get_connection() as conn:
             rows = conn.execute(
-                "SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id FROM waifus"
+                "SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id, birthday_mmdd, metadata FROM waifus"
             ).fetchall()
         return [
             Waifu(
@@ -189,6 +201,8 @@ class WaifuRepository:
                 speech_service=row["speech_service"],
                 speaker=row["speaker"],
                 shared_context_id=row["shared_context_id"],
+                birthday_mmdd=row["birthday_mmdd"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else None,
             ) for row in rows]
 
     def update_waifu(
@@ -198,6 +212,8 @@ class WaifuRepository:
         is_active: bool = None,
         speech_service: Optional[str] = None,
         speaker: Optional[str] = None,
+        birthday_mmdd: Optional[str] = None,
+        metadata: Optional[dict] = None,
     ) -> Waifu:
         now = datetime.now(timezone.utc)
         with self.get_connection() as conn:
@@ -205,7 +221,7 @@ class WaifuRepository:
             if waifu_id:
                 row = conn.execute(
                     """
-                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id
+                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id, birthday_mmdd, metadata
                     FROM waifus
                     WHERE waifu_id = ?
                     """,
@@ -214,7 +230,7 @@ class WaifuRepository:
             else:
                 row = conn.execute(
                     """
-                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id
+                    SELECT waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id, birthday_mmdd, metadata
                     FROM waifus
                     WHERE is_active = 1
                     ORDER BY updated_at DESC
@@ -234,6 +250,9 @@ class WaifuRepository:
             shared_context_id = (
                 row["shared_context_id"] if row and row["shared_context_id"] else f"ctx_{target_waifu_id}"
             )
+            updated_birthday_mmdd = birthday_mmdd if birthday_mmdd is not None else (row["birthday_mmdd"] if row else None)
+            existing_metadata = json.loads(row["metadata"]) if row and row["metadata"] else None
+            updated_metadata = metadata if metadata is not None else existing_metadata
 
             if is_active:
                 conn.execute(
@@ -242,14 +261,16 @@ class WaifuRepository:
                 )
             conn.execute(
                 """
-                INSERT INTO waifus (waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO waifus (waifu_id, waifu_name, updated_at, is_active, speech_service, speaker, shared_context_id, birthday_mmdd, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(waifu_id) DO UPDATE SET
                     waifu_name = excluded.waifu_name,
                     updated_at = excluded.updated_at,
                     is_active = excluded.is_active,
                     speech_service = excluded.speech_service,
-                    speaker = excluded.speaker
+                    speaker = excluded.speaker,
+                    birthday_mmdd = excluded.birthday_mmdd,
+                    metadata = excluded.metadata
                 """,
                 (
                     target_waifu_id,
@@ -259,6 +280,8 @@ class WaifuRepository:
                     updated_speech_service,
                     updated_speaker,
                     shared_context_id,
+                    updated_birthday_mmdd,
+                    json.dumps(updated_metadata, ensure_ascii=False) if updated_metadata is not None else None,
                 ),
             )
             conn.commit()
@@ -271,6 +294,8 @@ class WaifuRepository:
             speech_service=updated_speech_service,
             speaker=updated_speaker,
             shared_context_id=shared_context_id,
+            birthday_mmdd=updated_birthday_mmdd,
+            metadata=updated_metadata,
         )
 
     def delete_waifu(self, waifu_id: str) -> None:

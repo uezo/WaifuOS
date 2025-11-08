@@ -32,6 +32,8 @@ class GetWaifuResponse(BaseModel):
     is_active: bool = False
     speech_service: Optional[str] = None
     speaker: Optional[str] = None
+    birthday_mmdd: Optional[str] = None
+    metadata: Optional[dict] = None
 
 class WaifuWithoutImage(BaseModel):
     waifu_id: str
@@ -39,6 +41,8 @@ class WaifuWithoutImage(BaseModel):
     is_active: bool = False
     speech_service: Optional[str] = None
     speaker: Optional[str] = None
+    birthday_mmdd: Optional[str] = None
+    metadata: Optional[dict] = None
 
 class GetWaifusResponse(BaseModel):
     waifus: List[WaifuWithoutImage]
@@ -151,7 +155,9 @@ def get_waifu_router(
             waifu_image=image_b64,
             is_active=waifu.is_active,
             speech_service=waifu.speech_service,
-            speaker=waifu.speaker
+            speaker=waifu.speaker,
+            birthday_mmdd=waifu.birthday_mmdd,
+            metadata=waifu.metadata
         )
 
     @router.get("/waifu", response_model=GetWaifuResponse)
@@ -179,7 +185,9 @@ def get_waifu_router(
             waifu_name=w.waifu_name,
             is_active=w.is_active,
             speech_service=w.speech_service,
-            speaker=w.speaker
+            speaker=w.speaker,
+            birthday_mmdd=w.birthday_mmdd,
+            metadata=w.metadata
         ) for w in waifu_repo.get_waifus()])
 
     @router.post("/waifu/create")
