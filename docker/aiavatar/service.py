@@ -44,6 +44,7 @@ class WaifuService:
         self.timezone = timezone
 
         self._on_waifu_activated: callable = None
+        self._on_waifu_updated: callable = None
 
     async def generate_image(self, character_prompt: str, additional_info: str):
         image_generation_prompt = None
@@ -177,6 +178,42 @@ class WaifuService:
             await self._on_waifu_activated(activated_waifu)
 
         return activated_waifu
+
+    async def update(
+        self,
+        waifu_id: str,
+        waifu_name: str = None,
+        speech_service: str = None,
+        speaker: str = None,
+        birthday_mmdd: str = None,
+        metadata: dict = None
+    ) -> Waifu:
+        waifu = self.waifu_repo.get_waifu(waifu_id=waifu_id)
+        if not waifu:
+            raise Exception(f"waifu not found: waifu_id={waifu_id}")
+
+        # Update
+        updated_waifu = self.waifu_repo.update_waifu(
+            waifu_id=waifu_id,
+            waifu_name=waifu_name,
+            speech_service=speech_service,
+            speaker=speaker,
+            birthday_mmdd=birthday_mmdd,
+            metadata=metadata or {}
+        )
+
+        if self._on_waifu_updated:
+            await self._on_waifu_updated(updated_waifu)
+
+        return updated_waifu
+
+    def on_waifu_activated(self, func):
+        self._on_waifu_activated = func
+        return func
+
+    def on_waifu_updated(self, func):
+        self._on_waifu_updated = func
+        return func
 
     @property
     def character_prompt(self) -> str:

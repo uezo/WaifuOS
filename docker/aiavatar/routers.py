@@ -47,6 +47,17 @@ class WaifuWithoutImage(BaseModel):
 class GetWaifusResponse(BaseModel):
     waifus: List[WaifuWithoutImage]
 
+class PostWaifuRequest(BaseModel):
+    waifu_id: str
+    waifu_name: Optional[str] = None
+    speech_service: Optional[str] = None
+    speaker: Optional[str] = None
+    birthday_mmdd: Optional[str] = None
+    metadata: Optional[dict] = None
+
+class PostWaifuResponse(WaifuWithoutImage):
+    pass
+
 class PostWaifuActivateRequest(BaseModel):
     waifu_id: str
 
@@ -190,6 +201,27 @@ def get_waifu_router(
             metadata=w.metadata
         ) for w in waifu_repo.get_waifus()])
 
+    @router.post("/waifu", response_model=PostWaifuResponse)
+    async def post_waifu(
+        request: PostWaifuRequest,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        waifu = waifu_repo.get_waifu(waifu_id=request.waifu_id)
+        if not waifu:
+            return JSONResponse(content={"error": "waifu is not found"}, status_code=404)
+
+        return await waifu_service.update(
+            waifu_id=request.waifu_id,
+            waifu_name=request.waifu_name,
+            speech_service=request.speech_service,
+            speaker=request.speaker,
+            birthday_mmdd=request.birthday_mmdd,
+            metadata=request.metadata
+        )
+
     @router.post("/waifu/create")
     async def post_waifu_create(
         request: PostWaifuCreateRequest,
@@ -256,7 +288,7 @@ def get_waifu_router(
         return PostCliWebBridgeResponse(link=link)
 
     @router.get("/cli-web-bridge/open", response_class=HTMLResponse)
-    async def het_cli_web_bridge_open(code: str):
+    async def get_cli_web_bridge_open(code: str):
         token = cli_web_bridge_tokens[code]
         now = datetime.now(timezone.utc)
         if not token or token["expires_at"] < now:

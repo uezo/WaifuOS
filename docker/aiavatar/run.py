@@ -83,6 +83,7 @@ waifu_scheduler = WaifuScheduler(timezone=TIMEZONE, debug=AIAVATAR_DEBUG)
 chat_memory_client = ChatMemoryClient(base_url="http://chatmemory:8000")
 
 # Waifu activation
+@waifu_service.on_waifu_activated
 async def on_waifu_activated(activated_waifu: Waifu):
     # Update shared context
     llm.shared_context_ids = [
@@ -94,7 +95,12 @@ async def on_waifu_activated(activated_waifu: Waifu):
         tts.service_name = activated_waifu.speech_service
         tts.speaker = activated_waifu.speaker
 
-waifu_service._on_waifu_activated = on_waifu_activated
+@waifu_service.on_waifu_updated
+async def on_waifu_updated(updated_waifu: Waifu):
+    # Update voice
+    if isinstance(tts, SpeechGatewaySpeechSynthesizer):
+        tts.service_name = updated_waifu.speech_service
+        tts.speaker = updated_waifu.speaker
 
 
 # -------------------------------------------------------------------

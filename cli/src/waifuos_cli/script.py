@@ -11,6 +11,7 @@ import httpx
 from . import WaifuCLI
 from .create import WaifuCreator
 from .switch import WaifuSwitcher
+from .update import WaifuUpdater
 from .alias import create_alias as create_alias_subcommand
 
 
@@ -56,6 +57,7 @@ class WaifuScript:
         self.base_url = base_url
         self.waifu_creator: WaifuCreator = None
         self.waifu_switcher: WaifuSwitcher = None
+        self.waifu_updater: WaifuUpdater = None
 
     def create_waifu(self):
         if not self.waifu_creator:
@@ -66,7 +68,7 @@ class WaifuScript:
         if len(args) > 0:
             parser = argparse.ArgumentParser(
                 prog="waifu switch",
-                description="Create an additional command name that launches waifucli.",
+                description="Switch waifu.",
             )
             parser.add_argument(
                 "waifu_id",
@@ -80,6 +82,26 @@ class WaifuScript:
         if not self.waifu_switcher:
             self.waifu_switcher = WaifuSwitcher(base_url=self.base_url)
         self.waifu_switcher.switch_waifu(waifu_id=waifu_id)
+
+    def update_waifu(self, args: list[str]):
+        if len(args) > 0:
+            parser = argparse.ArgumentParser(
+                prog="waifu update",
+                description="Update waifu info.",
+            )
+            parser.add_argument(
+                "waifu_id",
+                help="Id of the waifu to update (e.g. 'waifu_98b0e6c2-678a-4ecb-8102-3daaef0ff431')."
+            )
+            options = parser.parse_args(args)
+            waifu_id = options.waifu_id
+        else:
+            waifu_id = None
+
+        if not self.waifu_updater:
+            self.waifu_updater = WaifuUpdater(base_url=self.base_url)
+        self.waifu_updater.update_waifu(waifu_id=waifu_id)
+
 
     def create_alias(self, main_command: str, args: list[str]):
         parser = argparse.ArgumentParser(
@@ -131,6 +153,9 @@ class WaifuScript:
         if args:
             if args[0] == "create":
                 self.create_waifu()
+                return
+            if args[0] == "update":
+                self.update_waifu(args[1:])
                 return
             if args[0] == "switch":
                 self.switch_waifu(args[1:])
