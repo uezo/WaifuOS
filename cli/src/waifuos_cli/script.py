@@ -102,7 +102,6 @@ class WaifuScript:
             self.waifu_updater = WaifuUpdater(base_url=self.base_url)
         self.waifu_updater.update_waifu(waifu_id=waifu_id)
 
-
     def create_alias(self, main_command: str, args: list[str]):
         parser = argparse.ArgumentParser(
             prog="waifu alias",
@@ -148,6 +147,23 @@ class WaifuScript:
             except Exception:
                 logger.exception("Error in opening browser")
 
+    def show_user(self, user_id: str):
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(
+                url=self.base_url + "/user",
+                params={
+                    "user_id": user_id
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            print(
+                f"user_id: {data['user_id']}\n"
+                f"waifu_id: {data['waifu_id']}\n"
+                f"user_name: {data['user_name']}\n"
+                f"relation: {data['relation']}"
+            )
+
     def main(self, sys_argv: list):
         args = sys_argv[1:]
         if args:
@@ -165,6 +181,9 @@ class WaifuScript:
                 return
             if args[0] == "browser":
                 self.open_browser(user_id=os.getenv("USER_ID"))
+                return
+            if args[0] == "user":
+                self.show_user(user_id=os.getenv("USER_ID"))
                 return
 
         cli_args = {"default_env_path": default_env_path, "base_url": self.base_url}
