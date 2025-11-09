@@ -6,7 +6,7 @@ from typing import Optional, List
 from uuid import uuid4
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from aiavatar.adapter.http.server import AIAvatarHttpServer
@@ -221,6 +221,30 @@ def get_waifu_router(
             birthday_mmdd=request.birthday_mmdd,
             metadata=request.metadata
         )
+
+    @router.post("/waifu/icon")
+    async def post_waifu_icon(
+        waifu_id: str = Form(...),
+        icon: UploadFile = File(...),
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        waifu = waifu_repo.get_waifu(waifu_id=waifu_id)
+        if not waifu:
+            return JSONResponse(content={"error": "waifu is not found"}, status_code=404)
+
+        if icon.content_type != "image/png":
+            return JSONResponse(content={"error": "icon must be a PNG file"}, status_code=400)
+
+        image_bytes = await icon.read()
+        if not image_bytes:
+            return JSONResponse(content={"error": "icon file is empty"}, status_code=400)
+
+        waifu_service.update_image(waifu_id=waifu_id, image_bytes=image_bytes)
+
+        return JSONResponse(content={"result": "success"})
 
     @router.post("/waifu/create")
     async def post_waifu_create(

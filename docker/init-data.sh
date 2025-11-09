@@ -39,6 +39,7 @@ fi
 
 # Copy initial data
 cp ./aiavatar/system_prompt_base.md "$DATA_PATH/aiavatar"
+cp ./aiavatar/default_icon.png "$DATA_PATH/aiavatar"
 cp ./nginx/proxy.conf "$DATA_PATH/nginx/conf.d"
 cp ./nginx/index.html "$DATA_PATH/nginx/html"
 

@@ -114,13 +114,15 @@ class WaifuCreator:
                                         render_status(show_spinner=not all_done)
                                         if all_done:
                                             stop_spinner.set()
+                                elif data_type == "warning":
+                                    final_message += f"⚠️ {chunk_json.get('content')}\n"
                                 elif data_type == "final":
-                                    final_message = f"\033[1;3m💍 Your waifu '{character_name}' is ready!\033[0m\n\nRun 'waifu' to start chatting with {character_name}."
+                                    final_message += f"\033[1;3m💍 Your waifu '{character_name}' is ready!\033[0m\n\nRun 'waifu' to start chatting with {character_name}."
                                     stop_spinner.set()
                                     break
                                 elif data_type == "error":
                                     stop_spinner.set()
-                                    final_message = f"💔 {chunk_json.get('content')}"
+                                    final_message += f"💔 {chunk_json.get('content')}"
                                     break
                     finally:
                         stop_spinner.set()

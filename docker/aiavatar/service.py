@@ -79,6 +79,10 @@ class WaifuService:
             character_image_bytes = f.read()
         return character_image_bytes
 
+    def update_image(self, waifu_id: str, image_bytes: bytes):
+        with open(f"{self.data_dir}/waifus/{waifu_id}/icon.png", "wb") as f:
+            f.write(image_bytes)
+
     async def create(
         self,
         *,
@@ -123,14 +127,23 @@ class WaifuService:
 
             # Generate image
             progress = "creating icon image"
-            image_generation_prompt, image_bytes = await self.generate_image(
-                character_prompt,
-                additional_info=""
-            )
-            if image_bytes:
-                with open(waifu_dir_path / "icon.png", "wb") as f:
-                    f.write(image_bytes)
-                    yield image_bytes, "image_bytes"
+            image_bytes = None
+            try:
+                image_generation_prompt, image_bytes = await self.generate_image(
+                    character_prompt,
+                    additional_info=""
+                )
+            except Exception:
+                logger.exception(f"Error at generating icon image.")
+
+            if not image_bytes:
+                yield "Error in generating icon. Use default icon instead.", "warning"
+                with open(f"{self.data_dir}/default_icon.png", "rb") as f:
+                    image_bytes = f.read()
+
+            with open(waifu_dir_path / "icon.png", "wb") as f:
+                f.write(image_bytes)
+                yield image_bytes, "image_bytes"
 
             # Update database
             progress = "activating waifu"
