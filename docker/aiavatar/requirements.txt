@@ -6,6 +6,6 @@ sse-starlette>=2.2.1
 python-multipart>=0.0.20
 uvicorn>=0.34.0
 websockets>=14.2
-aiavatar>=0.7.16
+aiavatar>=0.7.17
 APScheduler==3.11.0
 jpholiday
