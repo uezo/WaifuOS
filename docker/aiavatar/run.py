@@ -35,7 +35,7 @@ load_dotenv()
 AIAVATAR_DEBUG = os.getenv("AIAVATAR_DEBUG", "false").lower() in ("true", "1", "yes")
 AIAVATAR_LOG_LEVEL = os.getenv("AIAVATAR_LOG_LEVEL", "INFO")
 AIAVATAR_API_KEY=os.getenv("AIAVATAR_API_KEY")
-AIAVATAR_DAY_BOUNDARY_TIME=os.getenv("AIAVATAR_DAY_BOUNDARY_TIME")
+AIAVATAR_DAY_BOUNDARY_TIME=int(os.getenv("AIAVATAR_DAY_BOUNDARY_TIME", "3"))
 DATA_DIR = "/data"
 OPENAI_API_KEY = os.getenv("LLM_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("LLM_MODEL")
@@ -65,6 +65,7 @@ prompt_builder = PromptBuilder(
     openai_api_key=OPENAI_API_KEY,
     openai_model=OPENAI_MODEL,
     openai_reasoning_effort=OPENAI_REASONING_EFFORT,
+    day_boundary_time=AIAVATAR_DAY_BOUNDARY_TIME,
     timezone=TIMEZONE
 )
 waifu_service = WaifuService(
@@ -209,17 +210,22 @@ http_app.sts.on_finish(on_finish)
 # Scheduler
 # -------------------------------------------------------------------
 
-@waifu_scheduler.cron("0 3 * * *", id="clear_contexts_job")
+@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="clear_contexts_job")
 def clear_contexts_job():
     context_repo.remove_context()
 
-@waifu_scheduler.cron("0 3 * * *", id="update_daily_plan_job")
+@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="update_daily_plan_job")
 async def update_daily_plan_job():
     await waifu_service.prompt_builder.generate_daily_plan_prompt(
         waifu_id=waifu_service.current_waifu.waifu_id,
         character_prompt=waifu_service.character_prompt,
         weekly_plan_prompt=waifu_service.weekly_plan_prompt
     )
+
+@waifu_scheduler.every(hours=1, id="scheduler_healthcheck_job")
+def scheduler_healthcheck_job():
+    if AIAVATAR_DEBUG:
+        logger.info("Scheduler job is healty")
 
 
 # -------------------------------------------------------------------
@@ -231,6 +237,7 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initalize_tools()
+    await waifu_service.activate(waifu_id=waifu_service.current_waifu.waifu_id)
     waifu_scheduler.start()
     yield
     await finalize_tools()

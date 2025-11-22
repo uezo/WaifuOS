@@ -169,12 +169,12 @@ class WaifuService:
         if not waifu:
             raise Exception(f"waifu not found: waifu_id={waifu_id}")
 
-        # Make today's plan prompt if too old
-        if self.prompt_builder.is_daily_plan_prompt_expired(waifu_id=waifu.waifu_id):
+        # Make today's plan prompt if it doesn't exist
+        if not self.prompt_builder.get_daily_plan_prompt_path(waifu_id=waifu_id).exists():
             await self.prompt_builder.generate_daily_plan_prompt(
                 waifu_id=waifu.waifu_id,
-                character_prompt=self.character_prompt,
-                weekly_plan_prompt=self.weekly_plan_prompt
+                character_prompt=self.prompt_builder.get_character_prompt(waifu_id=waifu.waifu_id),
+                weekly_plan_prompt=self.prompt_builder.get_weekly_plan_prompt(waifu_id=waifu.waifu_id)
             )
 
         # Activate

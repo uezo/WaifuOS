@@ -62,12 +62,14 @@ class PromptBuilder:
         openai_api_key: str,
         openai_model: str,
         openai_reasoning_effort: str,
+        day_boundary_time: int,
         timezone: str
     ):
         self.data_dir = data_dir
         self.client = openai.AsyncClient(api_key=openai_api_key, timeout=120.0)
         self.openai_model = openai_model
         self.openai_reasoning_effort = openai_reasoning_effort
+        self.day_boundary_time = day_boundary_time
         self.timezone = timezone
 
         self.character_prompt_timestamps = {}
@@ -115,7 +117,7 @@ class PromptBuilder:
                 today=today, character_prompt=character_prompt
             ),
             user_content=weekly_plan_prompt,
-            save_path=f"{self.data_dir}/waifus/{waifu_id}/plan_daily_prompt.md"
+            save_path=self.get_daily_plan_prompt_path(waifu_id=waifu_id)
         )
 
     def get_character_prompt(self, waifu_id: str):
@@ -139,7 +141,7 @@ class PromptBuilder:
         return self.plan_weekly_prompts[waifu_id]
 
     def get_daily_plan_prompt(self, waifu_id: str):
-        plan_daily_prompt_path = Path(f"{self.data_dir}/waifus/{waifu_id}/plan_daily_prompt.md")
+        plan_daily_prompt_path = self.get_daily_plan_prompt_path(waifu_id=waifu_id)
         prompt_timestamp = datetime.fromtimestamp(plan_daily_prompt_path.stat().st_mtime)
         if prompt_timestamp > self.plan_daily_prompt_timestamps.get(waifu_id, datetime.min):
             with open(plan_daily_prompt_path, "r") as f:
@@ -147,14 +149,6 @@ class PromptBuilder:
             self.plan_daily_prompt_timestamps[waifu_id] = prompt_timestamp
             logger.info(f"Daily plan prompt reloaded from {plan_daily_prompt_path}")
         return self.plan_daily_prompts[waifu_id]
-
-    def is_daily_plan_prompt_expired(self, waifu_id: str) -> bool:
-        plan_daily_prompt_path = Path(f"{self.data_dir}/waifus/{waifu_id}/plan_daily_prompt.md")
-        if not plan_daily_prompt_path.exists():
-            return True
-        timezone = ZoneInfo(self.timezone)
-        prompt_timestamp = datetime.fromtimestamp(plan_daily_prompt_path.stat().st_mtime, tz=timezone)
-        return prompt_timestamp.date() == (datetime.now(timezone) - timedelta(days=1)).date()
 
     def get_base_prompt(self):
         base_prompt_path = Path(f"{self.data_dir}/system_prompt_base.md")
@@ -173,3 +167,9 @@ class PromptBuilder:
         )
 
         return system_prompt.format(**system_prompt_params)
+
+    def get_daily_plan_prompt_path(self, waifu_id: str, date: datetime = None) -> Path:
+        target_date = date or datetime.now(ZoneInfo(self.timezone)) - timedelta(hours=self.day_boundary_time)
+        daily_plan_dir_path = Path(f"{self.data_dir}/waifus/{waifu_id}/plan_daily_prompts")
+        daily_plan_dir_path.mkdir(exist_ok=True)
+        return daily_plan_dir_path / f"{target_date.strftime('%Y%m%d')}.md"

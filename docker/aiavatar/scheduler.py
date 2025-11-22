@@ -19,18 +19,56 @@ class WaifuScheduler:
         self.debug = debug
         self._started = False
 
-    def every(self, **interval_kwargs):
+    def every(
+        self,
+        *,
+        seconds: int | None = None,
+        minutes: int | None = None,
+        hours: int | None = None,
+        days: int | None = None,
+        weeks: int | None = None,
+        start_date: datetime | str | None = None,
+        end_date: datetime | str | None = None,
+        jitter: int | None = None,
+        timezone: str | ZoneInfo | None = None,
+        **add_job_kwargs,
+    ):
         """
-        @mysched.every(seconds=..., minutes=..., hours=..., days=..., weeks=...,
-                       id=..., max_instances=..., coalesce=..., misfire_grace_time=..., jitter=..., replace_existing=True)
+        Interval decorator with explicit interval params and arbitrary job kwargs.
+
+        Example:
+            @mysched.every(minutes=5, id="job1", max_instances=1)
         """
-        def _decorator(func: Callable | None = None, /, **add_job_kwargs):
-            # decorator with optional second-phrase options: @mysched.every(...)(id="x")
-            if func is None:
-                def inner(f: Callable):
-                    return self._register_interval(f, interval_kwargs, add_job_kwargs)
-                return inner
-            return self._register_interval(func, interval_kwargs, add_job_kwargs)
+        interval_kwargs: Dict[str, Any] = {}
+        for name, value in (
+            ("seconds", seconds),
+            ("minutes", minutes),
+            ("hours", hours),
+            ("days", days),
+            ("weeks", weeks),
+            ("jitter", jitter),
+        ):
+            if value is not None:
+                interval_kwargs[name] = value
+
+        def _convert_dt(dt: datetime | str | None):
+            if dt is None:
+                return None
+            if isinstance(dt, str):
+                parsed = datetime.fromisoformat(dt)
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=self.tz)
+            return dt
+
+        if converted := _convert_dt(start_date):
+            interval_kwargs["start_date"] = converted
+        if converted := _convert_dt(end_date):
+            interval_kwargs["end_date"] = converted
+
+        trigger_timezone = ZoneInfo(timezone) if isinstance(timezone, str) else timezone or self.tz
+
+        def _decorator(func: Callable):
+            trigger = IntervalTrigger(**dict(interval_kwargs), timezone=trigger_timezone)
+            return self._register(func, trigger, add_job_kwargs)
         return _decorator
 
     def cron(self, expr: str, /, **add_job_kwargs):
@@ -70,10 +108,6 @@ class WaifuScheduler:
         )
 
         return func
-
-    def _register_interval(self, func: Callable, interval_kwargs: dict, add_job_kwargs: dict):
-        trigger = IntervalTrigger(**interval_kwargs, timezone=self.tz)
-        return self._register(func, trigger, add_job_kwargs)
 
     def _wrap_sync(self, func: Callable):
         if inspect.iscoroutinefunction(func):
