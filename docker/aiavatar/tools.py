@@ -1,9 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from logging import getLogger
-from typing import Callable
-from urllib.parse import urlparse, parse_qs
-import openai
+import httpx
 from aiavatar.sts.llm import LLMService, Tool
 from entities import UserRepository
 from service import WaifuService
@@ -116,115 +114,40 @@ def register_tools(
     llm.add_tool(update_userinfo_tool)
 
 
-    class OpenAIWebSearch:
-        def __init__(self,
-            *,
-            openai_api_key: str,
-            system_prompt: str = None,
-            base_url: str = None,
-            model: str = "gpt-5-search-api",
-            temperature: float = 0.5,
-            search_context_size: str = "medium",
-            country: str = None,
-            language: str = None,
-            make_query: Callable[[str], str] = None,
-            timeout: int = 30000,
-            debug: bool = False
-        ):
-            if "azure" in model:
-                api_version = parse_qs(urlparse(base_url).query).get("api-version", [None])[0]
-                self.openai_client = openai.AsyncAzureOpenAI(
-                    api_key=openai_api_key,
-                    api_version=api_version,
-                    base_url=base_url,
-                    timeout=timeout
-                )
-            else:
-                self.openai_client = openai.AsyncClient(api_key=openai_api_key, base_url=base_url, timeout=timeout)
-
-            self.system_prompt = system_prompt or "Search the web to answer the user's query. Base your response strictly on the search results, and do not include your own opinions."
-            self.model = model
-            self.temperature = temperature
-            self.search_context_size = search_context_size
-            self.country = country
-            self.language = language
-            self.make_query = make_query
-            self.debug = debug
-
-        async def search(self, query: str):
-            web_search_options = {
-                "search_context_size": self.search_context_size
-            }
-            if self.country:
-                web_search_options["user_location"] = {
-                    "type": "approximate",
-                    "approximate": {
-                        "country": self.country
-                    }
-                }
-
-            if self.make_query:
-                query = self.make_query(query)
-
-            if self.debug:
-                logger.info(f"OpenAI WebSearch Query: {query}")
-
-            response = await self.openai_client.chat.completions.create(
-                model=self.model,
-                web_search_options=web_search_options,
-                messages=[
-                    {"role": "system", "content": self.system_prompt + f"\nOutput language code: {self.language}" if self.language else ""},
-                    {"role": "user", "content": f"Search: {query}"}
-                ],
-            )
-
-            search_result = response.choices[0].message.content
-            if self.debug:
-                logger.info(f"OpenAI WebSearch Result: {search_result}")
-
-            return {"search_result": search_result}
-
-
-    class OpenAIWebSearchTool(Tool):
+    class GrokWebSearchTool(Tool):
         def __init__(
             self,
             *,
-            openai_api_key: str,
-            system_prompt: str = None,
-            base_url: str = None,
-            model: str = "gpt-4o-search-preview",
-            temperature: float = 0.5,
-            search_context_size: str = "medium",
-            country: str = "JP",
-            language: str = None,
-            make_query: Callable[[str], str] = None,
-            timeout: int = 30000,
+            xai_api_key: str,
+            model: str = "grok-4-fast-non-reasoning-latest",
+            max_connections: int = 100,
+            max_keepalive_connections: int = 20,
+            timeout: float = 60.0,
             name=None,
             spec=None,
             instruction = None,
             is_dynamic = False,
             debug: bool = False
         ):
-            self.openai_web_search = OpenAIWebSearch(
-                openai_api_key=openai_api_key,
-                system_prompt=system_prompt,
-                base_url=base_url,
-                model=model,
-                temperature=temperature,
-                search_context_size=search_context_size,
-                country=country,
-                language=language,
-                make_query = make_query,
-                timeout=timeout,
-                debug=debug
+            self.http_client = httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=httpx.Timeout(timeout),
+                limits=httpx.Limits(
+                    max_connections=max_connections,
+                    max_keepalive_connections=max_keepalive_connections
+                )
             )
+            self.xai_api_key = xai_api_key
+            self.model = model
+            self.debug = debug
+
             super().__init__(
                 name or "web_search",
                 spec or {
                     "type": "function",
                     "function": {
                         "name": name or "web_search",
-                        "description": "Search the web using OpenAI WebSearch",
+                        "description": "Search the web using Grok WebSearch",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -234,13 +157,221 @@ def register_tools(
                         },
                     }
                 },
-                self.openai_web_search.search,
+                self.search,
                 instruction,
                 is_dynamic
             )
 
-    openai_websearch_tool = OpenAIWebSearchTool(openai_api_key=openai_api_key, base_url=openai_base_url)
-    llm.add_tool(openai_websearch_tool)
+        async def search(self, query: str):
+            if self.debug:
+                logger.info(f"Grok Search Query: {query}")
+
+            resp = await self.http_client.post(
+                url="https://api.x.ai/v1/responses",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.xai_api_key}"
+                },
+                json={
+                    "model": self.model,
+                    "input": [{"role": "user", "content": f"Search query: {query}"}],
+                    "tools": [{"type": "web_search"}]
+                }
+            )
+
+            if resp.status_code != 200:
+                logger.error(f"Error at Grok web search tool: {resp.read()}")
+                return {"error": f"Error at Grok web search tool"}
+            
+            for o in resp.json()["output"]:
+                if content := o.get("content"):
+                    if self.debug:
+                        logger.warning(f"Grok Search Result: {content[0]['text']}")
+                    return {"search_result": content[0]["text"]}
+
+            return {"search_result": "No search results"}
+
+
+    class GeminiWebSearchTool(Tool):
+        def __init__(
+            self,
+            *,
+            gemini_api_key: str,
+            model: str = "gemini-2.5-flash",
+            max_connections: int = 100,
+            max_keepalive_connections: int = 20,
+            timeout: float = 60.0,
+            name=None,
+            spec=None,
+            instruction = None,
+            is_dynamic = False,
+            debug: bool = False
+        ):
+            self.http_client = httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=httpx.Timeout(timeout),
+                limits=httpx.Limits(
+                    max_connections=max_connections,
+                    max_keepalive_connections=max_keepalive_connections
+                )
+            )
+            self.gemini_api_key = gemini_api_key
+            self.model = model
+            self.debug = debug
+
+            super().__init__(
+                name or "web_search",
+                spec or {
+                    "type": "function",
+                    "function": {
+                        "name": name or "web_search",
+                        "description": "Search the web using Gemini WebSearch",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string"}
+                            },
+                            "required": ["query"]
+                        },
+                    }
+                },
+                self.search,
+                instruction,
+                is_dynamic
+            )
+
+        async def search(self, query: str):
+            if self.debug:
+                logger.info(f"Gemini Search Query: {query}")
+
+            resp = await self.http_client.post(
+                url=f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self.gemini_api_key
+                },
+                json={
+                    "contents": [{"parts": [{"text": f"Search query: {query}"}]}],
+                    "tools": [{"google_search": {}}]
+                }
+            )
+
+            if resp.status_code != 200:
+                logger.error(f"Error at Gemini web search tool: {resp.read()}")
+                return {"error": f"Error at Gemini web search tool"}
+
+            search_result = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+            if self.debug:
+                logger.warning(f"Grok Search Result: {search_result}")
+
+            return {"search_result": search_result}
+
+
+    class ClaudeWebSearchTool(Tool):
+        def __init__(
+            self,
+            *,
+            anthropic_api_key: str,
+            model: str = "claude-haiku-4-5",
+            max_connections: int = 100,
+            max_keepalive_connections: int = 20,
+            timeout: float = 60.0,
+            name=None,
+            spec=None,
+            instruction = None,
+            is_dynamic = False,
+            debug: bool = False
+        ):
+            self.http_client = httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=httpx.Timeout(timeout),
+                limits=httpx.Limits(
+                    max_connections=max_connections,
+                    max_keepalive_connections=max_keepalive_connections
+                )
+            )
+            self.anthropic_api_key = anthropic_api_key
+            self.model = model
+            self.debug = debug
+
+            super().__init__(
+                name or "web_search",
+                spec or {
+                    "name": name or "web_search",
+                    "description": "Search the web using Claude WebSearch",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"}
+                        },
+                        "required": ["query"]
+                    },
+                },
+                self.search,
+                instruction,
+                is_dynamic
+            )
+
+        async def search(self, query: str):
+            if self.debug:
+                logger.info(f"Claude Search Query: {query}")
+
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self.anthropic_api_key,
+                "anthropic-version": "2023-06-01"
+            }
+
+            payload = {
+                "model": self.model,
+                "max_tokens": 10240,
+                "messages": [
+                    {"role": "user", "content": f"Search query: {query}"}
+                ],
+                "tools": [{
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 5
+                }]
+            }
+
+            resp = await self.http_client.post(
+                url="https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=payload
+            )
+
+            if resp.status_code != 200:
+                logger.error(f"Error at Claude web search tool: {resp.read()}")
+                return {"error": f"Error at Claude web search tool"}
+
+            search_result = ""
+            for c in resp.json()["content"]:
+                if text := c.get("text"):
+                    search_result += text
+
+            if self.debug:
+                logger.info(f"Claude Search Result: {search_result}")
+
+            if search_result:
+                return {"search_result": search_result}
+            else:
+                return {"search_result": "No search results"}
+
+
+    if not openai_base_url:
+        from aiavatar.sts.llm.tools.openai_websearch import OpenAIWebSearchTool
+        llm.add_tool(OpenAIWebSearchTool(openai_api_key=openai_api_key))
+    elif "api.x.ai" in openai_base_url:
+        llm.add_tool(GrokWebSearchTool(xai_api_key=openai_api_key))
+    elif "google" in openai_base_url:
+        llm.add_tool(GeminiWebSearchTool(gemini_api_key=openai_api_key))
+    elif "anthropic" in openai_base_url:
+        llm.add_tool(ClaudeWebSearchTool(anthropic_api_key=openai_api_key))
+    else:
+        from aiavatar.sts.llm.tools.openai_websearch import OpenAIWebSearchTool
+        llm.add_tool(OpenAIWebSearchTool(openai_api_key=openai_api_key))
 
     # Long-term memory
     class RetrieveMemoryTool(Tool):
