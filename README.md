@@ -180,5 +180,17 @@ You can also view and test the API documentation at:
 > To generate audio, use the `voice_text` field from each response chunk and send it to the `/api/synthesize` endpoint for speech synthesis.
 
 
+## 📈 Observability
+
+Configure Langfuse host, secret key and public key in `.env`.
+
+```sh
+# Langfuse
+LANGFUSE_SECRET_KEY=sk-lf-XXXXXXXX
+LANGFUSE_PUBLIC_KEY=pk-lf-XXXXXXXX
+LANGFUSE_HOST=http://your.langfuse.server:3000
+```
+
+
 ## ⚖️ License
 This project is licensed under the Apache License 2.0 — see the [LICENSE](./LICENSE) file for details.

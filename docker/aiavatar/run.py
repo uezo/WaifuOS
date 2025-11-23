@@ -1,10 +1,21 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
 import logging
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
+# Configure root logger before import section
+AIAVATAR_LOG_LEVEL = os.getenv("AIAVATAR_LOG_LEVEL", "INFO")
+logger = logging.getLogger()
+logger.setLevel(AIAVATAR_LOG_LEVEL)
+log_format = logging.Formatter("[%(levelname)s] %(asctime)s : %(message)s")
+streamHandler = logging.StreamHandler()
+streamHandler.setFormatter(log_format)
+logger.addHandler(streamHandler)
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import re
 from uuid import uuid4
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -27,13 +38,11 @@ from chatmemory import ChatMemoryClient
 
 
 # -------------------------------------------------------------------
-# Configurations and logging
+# Configurations
 # -------------------------------------------------------------------
 
 # Environment variables
-load_dotenv()
 AIAVATAR_DEBUG = os.getenv("AIAVATAR_DEBUG", "false").lower() in ("true", "1", "yes")
-AIAVATAR_LOG_LEVEL = os.getenv("AIAVATAR_LOG_LEVEL", "INFO")
 AIAVATAR_API_KEY=os.getenv("AIAVATAR_API_KEY")
 AIAVATAR_DAY_BOUNDARY_TIME=int(os.getenv("AIAVATAR_DAY_BOUNDARY_TIME", "3"))
 DATA_DIR = "/data"
@@ -43,14 +52,6 @@ OPENAI_MODEL = os.getenv("LLM_MODEL")
 OPENAI_TEMPERATURE = os.getenv("LLM_TEMPERATURE")
 OPENAI_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT")
 TIMEZONE = os.getenv("TIMEZONE")
-
-# Configure root logger
-logger = logging.getLogger()
-logger.setLevel(AIAVATAR_LOG_LEVEL)
-log_format = logging.Formatter("[%(levelname)s] %(asctime)s : %(message)s")
-streamHandler = logging.StreamHandler()
-streamHandler.setFormatter(log_format)
-logger.addHandler(streamHandler)
 
 
 # -------------------------------------------------------------------
@@ -106,8 +107,6 @@ async def on_waifu_updated(updated_waifu: Waifu):
         tts.service_name = updated_waifu.speech_service
         tts.speaker = updated_waifu.speaker
 
-
-llm.debug = True
 
 # -------------------------------------------------------------------
 # WebSocket and RESTful API Adapter and Speech-to-Speech components

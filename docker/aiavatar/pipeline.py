@@ -49,6 +49,16 @@ DATABASE_URL = f"postgresql://{AIAVATAR_DB_USER}:{AIAVATAR_DB_PASSWORD}@{AIAVATA
 AIAVATAR_CONTEXT_TIMEOUT = int(os.getenv("AIAVATAR_CONTEXT_TIMEOUT", 86400))
 AIAVATAR_COT_ANSWER = os.getenv("AIAVATAR_COT_ANSWER")
 
+# Observability
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY")
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST")
+if LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY and LANGFUSE_HOST:
+    from langfuse.openai import openai as langfuse_openai
+    logger.info("Use Langfuse OpenAI-compatible client module for observability.")
+else:
+    langfuse_openai = None
+
 
 class STSPipelineManager:
     def __init__(self, waifu_service: WaifuService):
@@ -101,6 +111,7 @@ class STSPipelineManager:
                 temperature=LLM_TEMPERATURE,
                 reasoning_effort=LLM_REASONING_EFFORT,
                 context_manager=self.context_manager,
+                custom_openai_module=langfuse_openai,
                 debug=AIAVATAR_DEBUG
             )
 
