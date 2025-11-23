@@ -38,6 +38,7 @@ AIAVATAR_API_KEY=os.getenv("AIAVATAR_API_KEY")
 AIAVATAR_DAY_BOUNDARY_TIME=int(os.getenv("AIAVATAR_DAY_BOUNDARY_TIME", "3"))
 DATA_DIR = "/data"
 OPENAI_API_KEY = os.getenv("LLM_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("LLM_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL")
 OPENAI_MODEL = os.getenv("LLM_MODEL")
 OPENAI_TEMPERATURE = os.getenv("LLM_TEMPERATURE")
 OPENAI_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT")
@@ -63,6 +64,7 @@ context_repo = ContextRepository(connection_str=f"{DATA_DIR}/context.db")
 prompt_builder = PromptBuilder(
     data_dir=DATA_DIR,
     openai_api_key=OPENAI_API_KEY,
+    openai_base_url=OPENAI_BASE_URL,
     openai_model=OPENAI_MODEL,
     openai_reasoning_effort=OPENAI_REASONING_EFFORT,
     day_boundary_time=AIAVATAR_DAY_BOUNDARY_TIME,
@@ -74,6 +76,7 @@ waifu_service = WaifuService(
     user_repo=user_repo,
     prompt_builder=prompt_builder,
     openai_api_key=OPENAI_API_KEY,
+    openai_base_url=OPENAI_BASE_URL,
     openai_model=OPENAI_MODEL,
     openai_reasoning_effort=OPENAI_REASONING_EFFORT,
     timezone=TIMEZONE
@@ -103,6 +106,8 @@ async def on_waifu_updated(updated_waifu: Waifu):
         tts.service_name = updated_waifu.speech_service
         tts.speaker = updated_waifu.speaker
 
+
+llm.debug = True
 
 # -------------------------------------------------------------------
 # WebSocket and RESTful API Adapter and Speech-to-Speech components
@@ -141,6 +146,7 @@ register_tools(
     waifu_service=waifu_service,
     chat_memory_client=chat_memory_client,
     openai_api_key=OPENAI_API_KEY,
+    openai_base_url=OPENAI_BASE_URL,
     timezone=TIMEZONE
 )
 

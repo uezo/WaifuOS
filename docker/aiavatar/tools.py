@@ -19,6 +19,7 @@ def register_tools(
     waifu_service: WaifuService,
     chat_memory_client: ChatMemoryClient,
     openai_api_key: str,
+    openai_base_url: str,
     timezone: str
 ):
     class GetCurrentDatetimeTool(Tool):
@@ -238,7 +239,7 @@ def register_tools(
                 is_dynamic
             )
 
-    openai_websearch_tool = OpenAIWebSearchTool(openai_api_key=openai_api_key)
+    openai_websearch_tool = OpenAIWebSearchTool(openai_api_key=openai_api_key, base_url=openai_base_url)
     llm.add_tool(openai_websearch_tool)
 
     # Long-term memory

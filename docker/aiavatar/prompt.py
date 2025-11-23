@@ -60,13 +60,18 @@ class PromptBuilder:
         *,
         data_dir: str,
         openai_api_key: str,
+        openai_base_url: str,
         openai_model: str,
         openai_reasoning_effort: str,
         day_boundary_time: int,
         timezone: str
     ):
         self.data_dir = data_dir
-        self.client = openai.AsyncClient(api_key=openai_api_key, timeout=120.0)
+        self.client = openai.AsyncClient(
+            api_key=openai_api_key,
+            base_url=openai_base_url,
+            timeout=120.0
+        )
         self.openai_model = openai_model
         self.openai_reasoning_effort = openai_reasoning_effort
         self.day_boundary_time = day_boundary_time

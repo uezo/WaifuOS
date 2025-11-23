@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import AsyncGenerator
 from uuid import uuid4
+import httpx
 import openai
 from entities import UserRepository, WaifuRepository, Waifu
 from prompt import PromptBuilder
@@ -13,12 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 class WaifuService:
-    IMAGE_GENERATION_PROMPT_GENERATION_PROMPT = """与えられたキャラクター設定に相応しいSNSアイコン画像を生成するための生成AI用のプロンプトを出力してください。
+    IMAGE_GENERATION_PROMPT_BASE = """与えられたキャラクター設定に相応しいSNSアイコン画像を生成してください。
 
-- 日本のアニメキャラクターの作風とする
+## 基本ルール
+
+- 日本のアニメキャラクター風
+- アスペクト比は1:1
 - 色温度は5500K
-- Sexualなモデレーションに抵触する用語の出力を禁止
-- 出力内容をそのまま画像生成AIに入力するため、プロンプト部分のみを出力すること。言語は英語とする
+
+{CHARACTER_PROMPT}
 """
 
     def __init__(
@@ -29,6 +33,7 @@ class WaifuService:
         user_repo: UserRepository,
         prompt_builder: PromptBuilder,
         openai_api_key: str,
+        openai_base_url: str,
         openai_model: str,
         openai_reasoning_effort: str,
         timezone: str
@@ -38,7 +43,12 @@ class WaifuService:
         self.current_waifu = waifu_repo.get_waifu()
         self.user_repo = user_repo
         self.prompt_builder = prompt_builder
-        self.client = openai.AsyncClient(api_key=openai_api_key, timeout=120.0)
+        self.client = openai.AsyncClient(
+            api_key=openai_api_key,
+            base_url=openai_base_url,
+            timeout=120.0
+        )
+        self.openai_api_key = openai_api_key
         self.openai_model = openai_model
         self.openai_reasoning_effort = openai_reasoning_effort
         self.timezone = timezone
@@ -47,30 +57,53 @@ class WaifuService:
         self._on_waifu_updated: callable = None
 
     async def generate_image(self, character_prompt: str, additional_info: str):
-        image_generation_prompt = None
-        image_bytes = None
-
-        # Make prompt to generate image
-        user_content = additional_info + "\n\n" + character_prompt if character_prompt else character_prompt
-        prompt_resp = await self.client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": self.IMAGE_GENERATION_PROMPT_GENERATION_PROMPT},
-                {"role": "user", "content": user_content}
-            ],
-            model=self.openai_model,
-            reasoning_effort=self.openai_reasoning_effort or openai.NOT_GIVEN
-        )
-        image_generation_prompt = prompt_resp.choices[0].message.content
-        logger.info(f"Image generation prompt: {image_generation_prompt}")
+        image_generation_prompt = self.IMAGE_GENERATION_PROMPT_BASE.format(CHARACTER_PROMPT=character_prompt)
+        logger.info(f"Image generation prompt: {image_generation_prompt} (len={len(bytes(image_generation_prompt, encoding='utf-8'))})")
 
         # Generate image
-        resp = await self.client.images.generate(
-            model="gpt-image-1",
-            prompt=image_generation_prompt,
-            size="1024x1024"
-        )
-        image_base64 = resp.data[0].b64_json
-        image_bytes = base64.b64decode(image_base64)
+        image_bytes = None
+        if "grok" in self.openai_model:
+            resp = await self.client.images.generate(
+                model="grok-2-image-latest",
+                prompt=image_generation_prompt,
+                response_format="b64_json"
+            )
+            image_base64 = resp.data[0].b64_json
+            image_bytes = base64.b64decode(image_base64)
+        elif "gemini" in self.openai_model:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(
+                    url="https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent",
+                    headers={
+                        "x-goog-api-key": self.openai_api_key,
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "contents": [{
+                            "parts": [{"text": image_generation_prompt}]
+                        }],
+                        "generationConfig": {
+                            "imageConfig": {
+                                "aspectRatio": "1:1",
+                                "imageSize": "1K"
+                            }
+                        }
+                    }
+                )
+                image_base64 = None
+                for p in resp.json()["candidates"][0]["content"]["parts"]:
+                    if inline_data := p.get("inlineData"):
+                        image_base64 = inline_data["data"]
+                        break
+                image_bytes = base64.b64decode(image_base64)
+        else:
+            resp = await self.client.images.generate(
+                model="gpt-image-1",
+                prompt=image_generation_prompt,
+                size="1024x1024"
+            )
+            image_base64 = resp.data[0].b64_json
+            image_bytes = base64.b64decode(image_base64)
 
         return image_generation_prompt, image_bytes
 
