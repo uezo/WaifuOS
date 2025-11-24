@@ -52,6 +52,7 @@ OPENAI_MODEL = os.getenv("LLM_MODEL")
 OPENAI_TEMPERATURE = os.getenv("LLM_TEMPERATURE")
 OPENAI_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT")
 TIMEZONE = os.getenv("TIMEZONE")
+AIAVATAR_LONGTERM_MEMORY_ENABLED = os.getenv("AIAVATAR_LONGTERM_MEMORY_ENABLED", "true").lower() in ("true", "1", "yes")
 
 
 # -------------------------------------------------------------------
@@ -85,7 +86,7 @@ waifu_service = WaifuService(
 sts_manager = STSPipelineManager(waifu_service=waifu_service)
 vad, stt, llm, tts, session_state_manager, performance_recorder = sts_manager.get_pipeline_components()
 waifu_scheduler = WaifuScheduler(timezone=TIMEZONE, debug=AIAVATAR_DEBUG)
-chat_memory_client = ChatMemoryClient(base_url="http://chatmemory:8000")
+chat_memory_client = ChatMemoryClient(base_url="http://chatmemory:8000") if AIAVATAR_LONGTERM_MEMORY_ENABLED else None
 
 # Waifu activation
 @waifu_service.on_waifu_activated
@@ -203,10 +204,11 @@ async def on_finish(request: STSRequest, response: STSResponse):
             waifu_id=waifu_service.current_waifu.waifu_id
         )
     # Save Long-term memory
-    try:
-        await chat_memory_client.enqueue_messages(request, response, waifu_service.current_waifu.waifu_id)
-    except Exception as ex:
-        logger.error(f"Error at enqueue memory: {ex}")
+    if chat_memory_client:
+        try:
+            await chat_memory_client.enqueue_messages(request, response, waifu_service.current_waifu.waifu_id)
+        except Exception as ex:
+            logger.error(f"Error at enqueue memory: {ex}")
 ws_app.sts.on_finish(on_finish)
 http_app.sts.on_finish(on_finish)
 

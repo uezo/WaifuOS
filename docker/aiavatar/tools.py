@@ -421,12 +421,15 @@ def register_tools(
             logger.info(f"Search memory result: {result.__dict__}")
             return result.__dict__
 
-    retrieve_memory_tool = RetrieveMemoryTool(
-        chat_memory_client=chat_memory_client,
-        waifu_service=waifu_service,
-        debug=True
-    )
-    llm.add_tool(retrieve_memory_tool)
+    if chat_memory_client:
+        retrieve_memory_tool = RetrieveMemoryTool(
+            chat_memory_client=chat_memory_client,
+            waifu_service=waifu_service,
+            debug=True
+        )
+        llm.add_tool(retrieve_memory_tool)
+    else:
+        logger.warning("Long-term memory is disabled.")
 
 async def initalize_tools():
     pass

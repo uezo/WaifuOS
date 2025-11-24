@@ -14,7 +14,7 @@ CM_DB_USER = os.getenv("CM_DB_USER")
 CM_DB_PASSWORD = os.getenv("CM_DB_PASSWORD")
 # ChatMemory
 CM_OPENAI_API_KEY = os.getenv("CM_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-CM_OPENAI_BASE_URL = os.getenv("CM_OPENAI_BASE_URL")
+CM_OPENAI_BASE_URL = os.getenv("CM_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL")
 CM_LLM_MODEL = os.getenv("CM_LLM_MODEL")
 CM_EMBEDDING_MODEL = os.getenv("CM_EMBEDDING_MODEL")
 
