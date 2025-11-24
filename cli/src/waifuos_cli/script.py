@@ -5,6 +5,7 @@ import logging
 import os
 from pathlib import Path
 import sys
+import textwrap
 import webbrowser
 from dotenv import load_dotenv, set_key
 import httpx
@@ -164,25 +165,50 @@ class WaifuScript:
                 f"relation: {data['relation']}"
             )
 
+    def print_help(self, program_name: str):
+        program = normalize_command_name(program_name)
+        help_text = textwrap.dedent(
+            f"""\
+            Usage: {program} [command] [options]
+
+            Commands:
+              create                 Create a new waifu with the setup wizard.
+              update [waifu_id]      Update waifu info; prompts for ID when omitted.
+              switch [waifu_id]      Switch the active waifu; prompts for ID when omitted.
+              alias NAME [--dir DIR] [--copy]
+                                     Create an additional launcher command.
+              browser                Open the web UI for the current USER_ID in your browser.
+              user                   Show the user info for the current USER_ID.
+              help | -h | --help     Show this help message.
+
+            Run without a command to start chatting with your waifu.
+            Defaults are loaded from {default_env_path}.
+            """
+        )
+        print(help_text)
+
     def main(self, sys_argv: list):
         args = sys_argv[1:]
         if args:
-            if args[0] == "create":
+            if args[0] in {"help", "-h", "--help"}:
+                self.print_help(sys_argv[0])
+                return
+            elif args[0] == "create":
                 self.create_waifu()
                 return
-            if args[0] == "update":
+            elif args[0] == "update":
                 self.update_waifu(args[1:])
                 return
-            if args[0] == "switch":
+            elif args[0] == "switch":
                 self.switch_waifu(args[1:])
                 return
-            if args[0] == "alias":
+            elif args[0] == "alias":
                 self.create_alias(sys_argv[0], args[1:])
                 return
-            if args[0] == "browser":
+            elif args[0] == "browser":
                 self.open_browser(user_id=os.getenv("USER_ID"))
                 return
-            if args[0] == "user":
+            elif args[0] == "user":
                 self.show_user(user_id=os.getenv("USER_ID"))
                 return
 
