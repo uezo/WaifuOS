@@ -12,7 +12,7 @@ streamHandler = logging.StreamHandler()
 streamHandler.setFormatter(log_format)
 logger.addHandler(streamHandler)
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import re
 from uuid import uuid4
@@ -32,7 +32,8 @@ from prompt import PromptBuilder
 from service import WaifuService
 from pipeline import STSPipelineManager
 from scheduler import WaifuScheduler
-from tools import register_tools, initalize_tools, finalize_tools
+from tools import ToolManager, get_web_search_tool
+from diary import DiaryManager
 from routers import get_waifu_router
 from chatmemory import ChatMemoryClient
 
@@ -72,11 +73,20 @@ prompt_builder = PromptBuilder(
     day_boundary_time=AIAVATAR_DAY_BOUNDARY_TIME,
     timezone=TIMEZONE
 )
+diary_manager = DiaryManager(
+    data_dir=DATA_DIR,
+    openai_api_key=OPENAI_API_KEY,
+    openai_base_url=OPENAI_BASE_URL,
+    openai_model=OPENAI_MODEL,
+    openai_reasoning_effort=OPENAI_REASONING_EFFORT,
+    search_web=get_web_search_tool(OPENAI_API_KEY, OPENAI_BASE_URL).search
+)
 waifu_service = WaifuService(
     data_dir=DATA_DIR,
     waifu_repo=waifu_repo,
     user_repo=user_repo,
     prompt_builder=prompt_builder,
+    diary_manager=diary_manager,
     openai_api_key=OPENAI_API_KEY,
     openai_base_url=OPENAI_BASE_URL,
     openai_model=OPENAI_MODEL,
@@ -85,7 +95,6 @@ waifu_service = WaifuService(
 )
 sts_manager = STSPipelineManager(waifu_service=waifu_service)
 vad, stt, llm, tts, session_state_manager, performance_recorder = sts_manager.get_pipeline_components()
-waifu_scheduler = WaifuScheduler(timezone=TIMEZONE, debug=AIAVATAR_DEBUG)
 chat_memory_client = ChatMemoryClient(base_url="http://chatmemory:8000") if AIAVATAR_LONGTERM_MEMORY_ENABLED else None
 
 # Waifu activation
@@ -107,6 +116,18 @@ async def on_waifu_updated(updated_waifu: Waifu):
     if isinstance(tts, SpeechGatewaySpeechSynthesizer):
         tts.service_name = updated_waifu.speech_service
         tts.speaker = updated_waifu.speaker
+
+
+# Tools
+tool_manager = ToolManager(
+    llm=llm,
+    user_repo=user_repo,
+    waifu_service=waifu_service,
+    chat_memory_client=chat_memory_client,
+    openai_api_key=OPENAI_API_KEY,
+    openai_base_url=OPENAI_BASE_URL,
+    timezone=TIMEZONE
+)
 
 
 # -------------------------------------------------------------------
@@ -137,17 +158,6 @@ http_app = AIAvatarHttpServer(
     voice_recorder_dir=f"{DATA_DIR}/recorded_voices",
     api_key=AIAVATAR_API_KEY,
     debug=True
-)
-
-# Tools
-register_tools(
-    llm=llm,
-    user_repo=user_repo,
-    waifu_service=waifu_service,
-    chat_memory_client=chat_memory_client,
-    openai_api_key=OPENAI_API_KEY,
-    openai_base_url=OPENAI_BASE_URL,
-    timezone=TIMEZONE
 )
 
 # Start message (for WebSocket only)
@@ -216,18 +226,46 @@ http_app.sts.on_finish(on_finish)
 # -------------------------------------------------------------------
 # Scheduler
 # -------------------------------------------------------------------
+waifu_scheduler = WaifuScheduler(timezone=TIMEZONE, debug=AIAVATAR_DEBUG)
 
-@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="clear_contexts_job")
-def clear_contexts_job():
+@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="daily_job")
+async def daily_job():
+    today = datetime.now(ZoneInfo(TIMEZONE))
+    yesterday = today - timedelta(days=1)
+
+    # Diary
+    logger.info(f"Start generating diary for {yesterday.strftime('%Y/%m/%d (%a)')}")
+    last_diary = "## 昨日の日記\n\n記録なし"
+    try:
+        # Get yesterday's daily plan prompt
+        last_daily_plan_prompt = prompt_builder.get_daily_plan_prompt(
+            waifu_id=waifu_service.current_waifu.waifu_id,
+            target_date=yesterday
+        ) or "## 昨日の行動\n\n記録なし"
+        last_diary = await diary_manager.generate_diary(
+            waifu_id=waifu_service.current_waifu.waifu_id,
+            character_prompt=waifu_service.character_prompt,
+            daily_activity=last_daily_plan_prompt,
+            target_date=yesterday
+        )
+    except:
+        logger.exception("Error in generating diary")
+
+    # Clear conversation context
     context_repo.remove_context()
 
-@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="update_daily_plan_job")
-async def update_daily_plan_job():
-    await waifu_service.prompt_builder.generate_daily_plan_prompt(
-        waifu_id=waifu_service.current_waifu.waifu_id,
-        character_prompt=waifu_service.character_prompt,
-        weekly_plan_prompt=waifu_service.weekly_plan_prompt
-    )
+    # Daily plan
+    logger.info(f"Start generating daily plan for {today.strftime('%Y/%m/%d (%a)')}")
+    try:
+        await waifu_service.prompt_builder.generate_daily_plan_prompt(
+            waifu_id=waifu_service.current_waifu.waifu_id,
+            character_prompt=waifu_service.character_prompt,
+            weekly_plan_prompt=waifu_service.weekly_plan_prompt,
+            additional_data=last_diary,
+            target_date=today
+        )
+    except:
+        logger.exception("Error in generating daily plan")
 
 @waifu_scheduler.every(hours=1, id="scheduler_healthcheck_job")
 def scheduler_healthcheck_job():
@@ -243,11 +281,11 @@ def scheduler_healthcheck_job():
 from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initalize_tools()
+    await tool_manager.initalize_tools()
     await waifu_service.activate(waifu_id=waifu_service.current_waifu.waifu_id)
     waifu_scheduler.start()
     yield
-    await finalize_tools()
+    await tool_manager.finalize_tools()
     waifu_scheduler.shutdown()
 
 # Build FastAPI server

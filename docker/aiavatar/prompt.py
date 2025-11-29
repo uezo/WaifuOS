@@ -49,10 +49,53 @@ class PromptBuilder:
 出力はマークダウンのテーブル部分のみとする。
 """
 
-    DAILY_PLAN_GENERATION_PROMPT = """
+    DAILY_PLAN_GENERATION_SYSTEM_PROMPT = """
 以下のキャラクター設定に基づき、与えられた週間スケジュールから{today}のスケジュールを生成してください。
 自由時間など行動予定が決まっていない部分があれば、具体的な予定を考えて埋めてください。
-出力フォーマットはマークダウンで、タイトルは「## 本日YYYY月MM月DD日 (曜日)の予定」、予定の内容はテーブル形式とします。\n\n\n{character_prompt}
+出力フォーマットはマークダウンで、タイトルは「## YYYY月MM月DD日 (曜日)の活動」、予定の内容はテーブル形式とします。
+
+{character_prompt}
+
+{additional_data}
+"""
+
+    DAILY_PLAN_GENERATION_USER_PROMPT = """
+週間予定は以下の通り。
+
+{weekly_plan_prompt}
+
+
+週間予定に基づき、以下のフォーマットで出力してください。タイトルとテーブルのみを出力すること。
+
+
+## YYYY月MM月DD日 (曜日)の活動
+
+| 時間帯 | 活動 |
+|--------|------|
+| 0:00-1:00 | |
+| 1:00-2:00 | |
+| 2:00-3:00 | |
+| 3:00-4:00 | |
+| 4:00-5:00 | |
+| 5:00-6:00 | |
+| 6:00-7:00 | |
+| 7:00-8:00 | |
+| 8:00-9:00 | |
+| 9:00-10:00 | |
+| 10:00-11:00 | |
+| 11:00-12:00 | |
+| 12:00-13:00 | |
+| 13:00-14:00 | |
+| 14:00-15:00 | |
+| 15:00-16:00 | |
+| 16:00-17:00 | |
+| 17:00-18:00 | |
+| 18:00-19:00 | |
+| 19:00-20:00 | |
+| 20:00-21:00 | |
+| 21:00-22:00 | |
+| 22:00-23:00 | |
+| 23:00-24:00 | |
 """
 
     def __init__(
@@ -64,7 +107,8 @@ class PromptBuilder:
         openai_model: str,
         openai_reasoning_effort: str,
         day_boundary_time: int,
-        timezone: str
+        timezone: str,
+        debug: bool = False,
     ):
         self.data_dir = data_dir
         self.client = openai.AsyncClient(
@@ -76,6 +120,7 @@ class PromptBuilder:
         self.openai_reasoning_effort = openai_reasoning_effort
         self.day_boundary_time = day_boundary_time
         self.timezone = timezone
+        self.debug = debug
 
         self.character_prompt_timestamps = {}
         self.character_prompts = {}
@@ -115,14 +160,26 @@ class PromptBuilder:
             save_path=f"{self.data_dir}/waifus/{waifu_id}/plan_weekly_prompt.md"
         )
 
-    async def generate_daily_plan_prompt(self, waifu_id: str, character_prompt: str, weekly_plan_prompt: str):
-        today = datetime.now(ZoneInfo(self.timezone)).strftime("%Y/%m/%d (%a)")
+    async def generate_daily_plan_prompt(
+        self,
+        *,
+        waifu_id: str,
+        character_prompt: str,
+        weekly_plan_prompt: str,
+        additional_data: str,
+        target_date: datetime = None,
+    ):
+        today = target_date or datetime.now(ZoneInfo(self.timezone)).strftime("%Y/%m/%d (%a)")
+        user_content = self.DAILY_PLAN_GENERATION_USER_PROMPT.format(weekly_plan_prompt=weekly_plan_prompt)
+        if self.debug:
+            logger.info(f"Daily plan generation request: {user_content}")
+
         return await self.generate(
-            system_content=self.DAILY_PLAN_GENERATION_PROMPT.format(
-                today=today, character_prompt=character_prompt
+            system_content=self.DAILY_PLAN_GENERATION_SYSTEM_PROMPT.format(
+                today=today, character_prompt=character_prompt, additional_data=additional_data
             ),
-            user_content=weekly_plan_prompt,
-            save_path=self.get_daily_plan_prompt_path(waifu_id=waifu_id)
+            user_content=user_content,
+            save_path=self.get_daily_plan_prompt_path(waifu_id=waifu_id, target_date=target_date)
         )
 
     def get_character_prompt(self, waifu_id: str):
@@ -145,8 +202,15 @@ class PromptBuilder:
             logger.info(f"Weekly plan prompt reloaded from {plan_weekly_prompt_path}")
         return self.plan_weekly_prompts[waifu_id]
 
-    def get_daily_plan_prompt(self, waifu_id: str):
-        plan_daily_prompt_path = self.get_daily_plan_prompt_path(waifu_id=waifu_id)
+    def get_daily_plan_prompt(self, waifu_id: str, target_date: datetime = None):
+        plan_daily_prompt_path = self.get_daily_plan_prompt_path(waifu_id=waifu_id, target_date=target_date)
+        if not plan_daily_prompt_path.exists():
+            return None
+        
+        if target_date:
+            with open(plan_daily_prompt_path, "r") as f:
+                return f.read()
+
         prompt_timestamp = datetime.fromtimestamp(plan_daily_prompt_path.stat().st_mtime)
         if prompt_timestamp > self.plan_daily_prompt_timestamps.get(waifu_id, datetime.min):
             with open(plan_daily_prompt_path, "r") as f:
@@ -173,8 +237,8 @@ class PromptBuilder:
 
         return system_prompt.format(**system_prompt_params)
 
-    def get_daily_plan_prompt_path(self, waifu_id: str, date: datetime = None) -> Path:
-        target_date = date or datetime.now(ZoneInfo(self.timezone)) - timedelta(hours=self.day_boundary_time)
+    def get_daily_plan_prompt_path(self, waifu_id: str, target_date: datetime = None) -> Path:
+        target_date = target_date or datetime.now(ZoneInfo(self.timezone)) - timedelta(hours=self.day_boundary_time)
         daily_plan_dir_path = Path(f"{self.data_dir}/waifus/{waifu_id}/plan_daily_prompts")
         daily_plan_dir_path.mkdir(exist_ok=True)
         return daily_plan_dir_path / f"{target_date.strftime('%Y%m%d')}.md"

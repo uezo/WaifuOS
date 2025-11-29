@@ -1,5 +1,5 @@
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import logging
 from pathlib import Path
@@ -9,6 +9,7 @@ import httpx
 import openai
 from entities import UserRepository, WaifuRepository, Waifu
 from prompt import PromptBuilder
+from diary import DiaryManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class WaifuService:
         waifu_repo: WaifuRepository,
         user_repo: UserRepository,
         prompt_builder: PromptBuilder,
+        diary_manager: DiaryManager,
         openai_api_key: str,
         openai_base_url: str,
         openai_model: str,
@@ -43,6 +45,7 @@ class WaifuService:
         self.current_waifu = waifu_repo.get_waifu()
         self.user_repo = user_repo
         self.prompt_builder = prompt_builder
+        self.diary_manager = diary_manager
         self.client = openai.AsyncClient(
             api_key=openai_api_key,
             base_url=openai_base_url,
@@ -204,10 +207,15 @@ class WaifuService:
 
         # Make today's plan prompt if it doesn't exist
         if not self.prompt_builder.get_daily_plan_prompt_path(waifu_id=waifu_id).exists():
+            last_diary = self.diary_manager.get_diary(
+                waifu.waifu_id,
+                target_date=datetime.now(ZoneInfo(self.timezone)) - timedelta(days=1)
+            ) or "## 昨日の日記\n\n記録なし"
             await self.prompt_builder.generate_daily_plan_prompt(
                 waifu_id=waifu.waifu_id,
                 character_prompt=self.prompt_builder.get_character_prompt(waifu_id=waifu.waifu_id),
-                weekly_plan_prompt=self.prompt_builder.get_weekly_plan_prompt(waifu_id=waifu.waifu_id)
+                weekly_plan_prompt=self.prompt_builder.get_weekly_plan_prompt(waifu_id=waifu.waifu_id),
+                additional_data=last_diary
             )
 
         # Activate
