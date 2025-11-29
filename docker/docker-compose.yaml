@@ -111,6 +111,7 @@ services:
       - .env
     ports:
       - "${VOICEVOX_PORT}:50021"
+    restart: unless-stopped
 
   sbv2-api-lite:
     container_name: sbv2-api-lite-app
