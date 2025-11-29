@@ -35,7 +35,7 @@ from scheduler import WaifuScheduler
 from tools import ToolManager, get_web_search_tool
 from diary import DiaryManager
 from routers import get_waifu_router
-from chatmemory import ChatMemoryClient
+from memory import ChatMemoryClient
 
 
 # -------------------------------------------------------------------

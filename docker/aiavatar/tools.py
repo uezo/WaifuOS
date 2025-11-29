@@ -7,7 +7,7 @@ from aiavatar.sts.llm import LLMService, Tool
 from aiavatar.sts.llm.tools.openai_websearch import OpenAIWebSearchTool
 from entities import UserRepository
 from service import WaifuService
-from chatmemory import ChatMemoryClient
+from memory import ChatMemoryClient
 
 logger = getLogger(__name__)
 
