@@ -15,6 +15,7 @@ logger.addHandler(streamHandler)
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import re
+from typing import List
 from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,7 +33,7 @@ from prompt import PromptBuilder
 from service import WaifuService
 from pipeline import STSPipelineManager
 from scheduler import WaifuScheduler
-from tools import ToolManager, get_web_search_tool
+from tools import ToolManager
 from diary import DiaryManager
 from routers import get_waifu_router
 from memory import ChatMemoryClient
@@ -78,8 +79,7 @@ diary_manager = DiaryManager(
     openai_api_key=OPENAI_API_KEY,
     openai_base_url=OPENAI_BASE_URL,
     openai_model=OPENAI_MODEL,
-    openai_reasoning_effort=OPENAI_REASONING_EFFORT,
-    search_web=get_web_search_tool(OPENAI_API_KEY, OPENAI_BASE_URL).search
+    openai_reasoning_effort=OPENAI_REASONING_EFFORT
 )
 waifu_service = WaifuService(
     data_dir=DATA_DIR,
@@ -228,47 +228,68 @@ http_app.sts.on_finish(on_finish)
 # -------------------------------------------------------------------
 waifu_scheduler = WaifuScheduler(timezone=TIMEZONE, debug=AIAVATAR_DEBUG)
 
-@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="daily_job")
-async def daily_job():
-    if not waifu_service.current_waifu:
-        return
-
-    today = datetime.now(ZoneInfo(TIMEZONE))
-    yesterday = today - timedelta(days=1)
-
-    # Diary
-    logger.info(f"Start generating diary for {yesterday.strftime('%Y/%m/%d (%a)')}")
-    last_diary = "## 昨日の日記\n\n記録なし"
+# Diary
+async def generate_diary(waifu_id: str, target_date: datetime) -> str:
     try:
         # Get yesterday's daily plan prompt
         last_daily_plan_prompt = prompt_builder.get_daily_plan_prompt(
-            waifu_id=waifu_service.current_waifu.waifu_id,
-            target_date=yesterday
+            waifu_id=waifu_id,
+            target_date=target_date
         ) or "## 昨日の行動\n\n記録なし"
-        last_diary = await diary_manager.generate_diary(
-            waifu_id=waifu_service.current_waifu.waifu_id,
-            character_prompt=waifu_service.character_prompt,
+
+        # Search news
+        search_result = await tool_manager.web_search_tool.search(query=f"{target_date.strftime('%Y/%m/%d')}の主要ニュース")
+
+        # Generate diary
+        return await diary_manager.generate_diary(
+            waifu_id=waifu_id,
+            character_prompt=prompt_builder.get_character_prompt(waifu_id=waifu_id),
             daily_activity=last_daily_plan_prompt,
-            target_date=yesterday
+            additional_contents=["## 本日の主要ニュース\n\n" + search_result.get("search_result", "なし")],
+            target_date=target_date
         )
     except:
         logger.exception("Error in generating diary")
 
-    # Clear conversation context
-    context_repo.remove_context()
+    return None
 
-    # Daily plan
-    logger.info(f"Start generating daily plan for {today.strftime('%Y/%m/%d (%a)')}")
+
+# Daily plan
+async def generate_daily_plan(waifu_id: str, additional_contents: List[str], target_date: datetime) -> str:
     try:
         await waifu_service.prompt_builder.generate_daily_plan_prompt(
-            waifu_id=waifu_service.current_waifu.waifu_id,
-            character_prompt=waifu_service.character_prompt,
-            weekly_plan_prompt=waifu_service.weekly_plan_prompt,
-            additional_data=last_diary,
-            target_date=today
+            waifu_id=waifu_id,
+            additional_contents=additional_contents,
+            target_date=target_date
         )
     except:
         logger.exception("Error in generating daily plan")
+
+
+@waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="daily_job")
+async def daily_job():
+    today = datetime.now(ZoneInfo(TIMEZONE))
+    yesterday = today - timedelta(days=1)
+
+    for waifu in waifu_repo.get_waifus():
+        # Diary
+        logger.info(f"Start generating diary for {yesterday.strftime('%Y/%m/%d (%a)')}: {waifu.waifu_name}")
+        last_diary = await generate_diary(
+            waifu_id=waifu.waifu_id,
+            target_date=yesterday
+        ) or "## 昨日の日記\n\n記録なし"
+
+        # Daily plan
+        logger.info(f"Start generating daily plan for {today.strftime('%Y/%m/%d (%a)')}: {waifu.waifu_name}")
+        await generate_daily_plan(
+            waifu_id=waifu.waifu_id,
+            additional_contents=[last_diary],
+            target_date=today
+        )
+
+    # Clear conversation context
+    context_repo.remove_context()
+
 
 @waifu_scheduler.every(hours=1, id="scheduler_healthcheck_job")
 def scheduler_healthcheck_job():

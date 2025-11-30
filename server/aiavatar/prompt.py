@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import logging
 from pathlib import Path
+from typing import List
 import openai
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class PromptBuilder:
 
 {character_prompt}
 
-{additional_data}
+{additional_contents}
 """
 
     DAILY_PLAN_GENERATION_USER_PROMPT = """
@@ -164,19 +165,21 @@ class PromptBuilder:
         self,
         *,
         waifu_id: str,
-        character_prompt: str,
-        weekly_plan_prompt: str,
-        additional_data: str,
+        additional_contents: List[str],
         target_date: datetime = None,
     ):
         today = target_date or datetime.now(ZoneInfo(self.timezone)).strftime("%Y/%m/%d (%a)")
-        user_content = self.DAILY_PLAN_GENERATION_USER_PROMPT.format(weekly_plan_prompt=weekly_plan_prompt)
+        user_content = self.DAILY_PLAN_GENERATION_USER_PROMPT.format(
+            weekly_plan_prompt=self.get_weekly_plan_prompt(waifu_id=waifu_id)
+        )
         if self.debug:
             logger.info(f"Daily plan generation request: {user_content}")
 
         return await self.generate(
             system_content=self.DAILY_PLAN_GENERATION_SYSTEM_PROMPT.format(
-                today=today, character_prompt=character_prompt, additional_data=additional_data
+                today=today,
+                character_prompt=self.get_character_prompt(waifu_id=waifu_id),
+                additional_contents="\n\n".join(additional_contents)
             ),
             user_content=user_content,
             save_path=self.get_daily_plan_prompt_path(waifu_id=waifu_id, target_date=target_date)
