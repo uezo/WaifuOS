@@ -230,6 +230,9 @@ waifu_scheduler = WaifuScheduler(timezone=TIMEZONE, debug=AIAVATAR_DEBUG)
 
 @waifu_scheduler.cron(f"0 {AIAVATAR_DAY_BOUNDARY_TIME} * * *", id="daily_job")
 async def daily_job():
+    if not waifu_service.current_waifu:
+        return
+
     today = datetime.now(ZoneInfo(TIMEZONE))
     yesterday = today - timedelta(days=1)
 
@@ -282,7 +285,8 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await tool_manager.initalize_tools()
-    await waifu_service.activate(waifu_id=waifu_service.current_waifu.waifu_id)
+    if waifu_service.current_waifu:
+        await waifu_service.activate(waifu_id=waifu_service.current_waifu.waifu_id)
     waifu_scheduler.start()
     yield
     await tool_manager.finalize_tools()

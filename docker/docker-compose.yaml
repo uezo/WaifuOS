@@ -2,8 +2,8 @@ services:
   db:
     container_name: waifuos-db
     build:
-      context: .
-      dockerfile: Dockerfile.postgres
+      context: ..
+      dockerfile: docker/db/Dockerfile.postgres
     env_file:
       - .env
     ports:
@@ -39,8 +39,8 @@ services:
   speech-gateway:
     container_name: speech-gateway-app
     build:
-      context: .
-      dockerfile: Dockerfile.spgw.app
+      context: ..
+      dockerfile: docker/speech-gateway/Dockerfile.spgw.app
     env_file:
       - .env
     ports:
@@ -62,15 +62,15 @@ services:
   aiavatar:
     container_name: aiavatar-app
     build:
-      context: .
-      dockerfile: Dockerfile.aiavatar.app
+      context: ..
+      dockerfile: docker/aiavatar/Dockerfile.aiavatar.app
     env_file:
       - .env
     ports:
       - "${AIAVATAR_PORT}:8000"
     command: ["uvicorn", "${AIAVATAR_MAIN_MODULE}:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
-      - ./aiavatar:/app
+      - ../server/aiavatar:/app
       - ${DATA_PATH:-../data}/aiavatar:/data
     depends_on:
       db:
@@ -86,8 +86,8 @@ services:
   chatmemory:
     container_name: chatmemory-app
     build:
-      context: .
-      dockerfile: Dockerfile.chatmemory.app
+      context: ..
+      dockerfile: docker/chatmemory/Dockerfile.chatmemory.app
     env_file:
       - .env
     ports:
@@ -116,8 +116,8 @@ services:
   sbv2-api-lite:
     container_name: sbv2-api-lite-app
     build:
-      context: .
-      dockerfile: Dockerfile.sbv2.app
+      context: ..
+      dockerfile: docker/sbv2lite/Dockerfile.sbv2.app
     env_file:
       - .env
     ports:

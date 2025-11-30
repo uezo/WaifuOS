@@ -157,7 +157,8 @@ class WaifuService:
             daily_plan_prompt = await self.prompt_builder.generate_daily_plan_prompt(
                 waifu_id=waifu_id,
                 character_prompt=character_prompt,
-                weekly_plan_prompt=weekly_plan_prompt
+                weekly_plan_prompt=weekly_plan_prompt,
+                additional_data=""
             )
             yield daily_plan_prompt, "daily_plan_prompt"
 

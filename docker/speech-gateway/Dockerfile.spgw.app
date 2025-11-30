@@ -14,7 +14,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy application
-COPY --chown=app:app ./chatmemory/ /app/
+COPY --chown=app:app ./server/speech-gateway/ /app/
 
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r /app/requirements.txt
