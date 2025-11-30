@@ -156,9 +156,8 @@ class WaifuService:
             progress = "creating daily plan"
             daily_plan_prompt = await self.prompt_builder.generate_daily_plan_prompt(
                 waifu_id=waifu_id,
-                character_prompt=character_prompt,
-                weekly_plan_prompt=weekly_plan_prompt,
-                additional_data=""
+                additional_contents=[],
+                target_date=datetime.now(ZoneInfo(self.timezone))
             )
             yield daily_plan_prompt, "daily_plan_prompt"
 
@@ -208,15 +207,16 @@ class WaifuService:
 
         # Make today's plan prompt if it doesn't exist
         if not self.prompt_builder.get_daily_plan_prompt_path(waifu_id=waifu_id).exists():
+            today = datetime.now(ZoneInfo(self.timezone))
+            yesterday = today - timedelta(days=1)
             last_diary = self.diary_manager.get_diary(
                 waifu.waifu_id,
-                target_date=datetime.now(ZoneInfo(self.timezone)) - timedelta(days=1)
+                target_date=yesterday
             ) or "## 昨日の日記\n\n記録なし"
             await self.prompt_builder.generate_daily_plan_prompt(
                 waifu_id=waifu.waifu_id,
-                character_prompt=self.prompt_builder.get_character_prompt(waifu_id=waifu.waifu_id),
-                weekly_plan_prompt=self.prompt_builder.get_weekly_plan_prompt(waifu_id=waifu.waifu_id),
-                additional_data=last_diary
+                additional_contents=[last_diary],
+                target_date=today
             )
 
         # Activate
