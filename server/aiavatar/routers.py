@@ -58,6 +58,9 @@ class PostWaifuRequest(BaseModel):
 class PostWaifuResponse(WaifuWithoutImage):
     pass
 
+class DeleteWaifuResponse(WaifuWithoutImage):
+    pass
+
 class PostWaifuActivateRequest(BaseModel):
     waifu_id: str
 
@@ -220,6 +223,35 @@ def get_waifu_router(
             speaker=request.speaker,
             birthday_mmdd=request.birthday_mmdd,
             metadata=request.metadata
+        )
+
+    @router.delete("/waifu/{waifu_id}")
+    async def delete_waifu(
+        waifu_id: str,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        waifu = waifu_service.waifu_repo.get_waifu(waifu_id=waifu_id)
+        if not waifu:
+            return JSONResponse(content={"error": f"waifu not found: waifu_id={waifu_id}"}, status_code=404)
+
+        waifu_service.waifu_repo.delete_waifu(waifu_id=waifu.waifu_id)
+
+        if waifu.is_active:
+            waifus = waifu_service.waifu_repo.get_waifus()
+            if waifus:
+                await waifu_service.activate(waifus[0].waifu_id)
+
+        return DeleteWaifuResponse(
+            waifu_id=waifu.waifu_id,
+            waifu_name=waifu.waifu_name,
+            is_active=waifu.is_active,
+            speech_service=waifu.speech_service,
+            speaker=waifu.speaker,
+            birthday_mmdd=waifu.birthday_mmdd,
+            metadata=waifu.metadata
         )
 
     @router.post("/waifu/icon")

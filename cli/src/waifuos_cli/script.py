@@ -165,6 +165,33 @@ class WaifuScript:
                 f"relation: {data['relation']}"
             )
 
+    def delete_waifu(self, args: list[str]):
+        if len(args) > 0:
+            parser = argparse.ArgumentParser(
+                prog="waifu delete",
+                description="Permanently delete a waifu.",
+            )
+            parser.add_argument(
+                "waifu_id",
+                help="Id of the waifu to delete (e.g. 'waifu_98b0e6c2-678a-4ecb-8102-3daaef0ff431')."
+            )
+            options = parser.parse_args(args)
+            waifu_id = options.waifu_id
+        else:
+            print("waifu_id is required.")
+            return
+        
+        confirmation = input(f"Are you sure to delete {waifu_id}? (y/n): ")
+        if confirmation.strip().lower() != "y":
+            return
+
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.delete(
+                url=self.base_url + f"/waifu/{waifu_id}",
+            )
+            resp.raise_for_status()
+            print(f"\033[1;3m💔 Successfully deleted '{resp.json()['waifu_name']}'\033[0m")
+
     def print_help(self, program_name: str):
         program = normalize_command_name(program_name)
         help_text = textwrap.dedent(
@@ -179,6 +206,7 @@ class WaifuScript:
                                      Create an additional launcher command.
               browser                Open the web UI for the current USER_ID in your browser.
               user                   Show the user info for the current USER_ID.
+              delete [waifu_id]        Permanently delete a waifu.
               help | -h | --help     Show this help message.
 
             Run without a command to start chatting with your waifu.
@@ -210,6 +238,9 @@ class WaifuScript:
                 return
             elif args[0] == "user":
                 self.show_user(user_id=os.getenv("USER_ID"))
+                return
+            elif args[0] == "delete":
+                self.delete_waifu(args[1:])
                 return
 
         cli_args = {"default_env_path": default_env_path, "base_url": self.base_url}
