@@ -168,7 +168,7 @@ class PromptBuilder:
         additional_contents: List[str],
         target_date: datetime = None,
     ):
-        today = target_date or datetime.now(ZoneInfo(self.timezone)).strftime("%Y/%m/%d (%a)")
+        today = target_date or datetime.now(ZoneInfo(self.timezone))
         user_content = self.DAILY_PLAN_GENERATION_USER_PROMPT.format(
             weekly_plan_prompt=self.get_weekly_plan_prompt(waifu_id=waifu_id)
         )
@@ -245,3 +245,15 @@ class PromptBuilder:
         daily_plan_dir_path = Path(f"{self.data_dir}/waifus/{waifu_id}/plan_daily_prompts")
         daily_plan_dir_path.mkdir(exist_ok=True)
         return daily_plan_dir_path / f"{target_date.strftime('%Y%m%d')}.md"
+
+    def update_weekly_plan_prompt(self, waifu_id: str, weekly_plan_prompt: str) -> str:
+        plan_weekly_prompt_path = Path(f"{self.data_dir}/waifus/{waifu_id}/plan_weekly_prompt.md")
+        with open(plan_weekly_prompt_path, "w") as f:
+            f.write(weekly_plan_prompt)
+        return weekly_plan_prompt
+
+    def update_daily_plan_prompt(self, waifu_id: str, daily_plan_prompt: str, target_date: datetime = None) -> str:
+        plan_daily_prompt_path = self.get_daily_plan_prompt_path(waifu_id=waifu_id, target_date=target_date)
+        with open(plan_daily_prompt_path, "w") as f:
+            f.write(daily_plan_prompt)
+        return daily_plan_prompt

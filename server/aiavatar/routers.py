@@ -1,5 +1,6 @@
 import base64
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date, time
+from zoneinfo import ZoneInfo
 import json
 import secrets
 from typing import Optional, List
@@ -81,6 +82,41 @@ class PostWaifuCreateResponse(BaseModel):
     weekly_plan_prompt: str
     daily_plan_prompt: str
 
+class GetWeeklyPlanResponse(BaseModel):
+    weekly_plan_prompt: str
+
+class PostWeeklyPlanRequest(BaseModel):
+    waifu_id: str
+    weekly_plan_prompt: str
+
+class PostWeeklyPlanResponse(BaseModel):
+    weekly_plan_prompt: str
+
+class PostWeeklyPlanGenerateRequest(BaseModel):
+    waifu_id: str
+
+class PostWeeklyPlanGenerateResponse(BaseModel):
+    weekly_plan_prompt: str
+
+class GetDailyPlanResponse(BaseModel):
+    daily_plan_prompt: str
+
+class PostDailyPlanRequest(BaseModel):
+    waifu_id: str
+    daily_plan_prompt: str
+    target_date: Optional[str] = None
+
+class PostDailyPlanResponse(BaseModel):
+    daily_plan_prompt: str
+
+class PostDailyPlanGenerateRequest(BaseModel):
+    waifu_id: str
+    additional_contents: Optional[List[str]] = None
+    target_date: Optional[str] = None
+
+class PostDailyPlanGenerateResponse(BaseModel):
+    daily_plan_prompt: str
+
 class PostCliWebBridgeRequest(BaseModel):
     user_id: str
 
@@ -93,13 +129,13 @@ def get_waifu_router(
     user_repo: UserRepository,
     waifu_repo: WaifuRepository,
     context_repo: ContextRepository,
-    waifu_service: WaifuService
+    waifu_service: WaifuService,
 ):
     router = APIRouter()
     bearer_scheme = HTTPBearer(auto_error=False)
     cli_web_bridge_tokens = {}
 
-    @router.get("/context", response_model=GetContextResponse)
+    @router.get("/context", response_model=GetContextResponse, summary="Get context_id with current waifu and the specified user.", tags=["Waifu management"])
     async def get_context(
         user_id: str,
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
@@ -123,7 +159,7 @@ def get_waifu_router(
             user_id=user_id
         )
 
-    @router.get("/user", response_model=GetUserResponse)
+    @router.get("/user", response_model=GetUserResponse, summary="Get specified user info with current waifu.", tags=["Waifu management"])
     async def get_user(
         user_id: Optional[str] = None,
         waifu_id: Optional[str] = None,
@@ -149,7 +185,7 @@ def get_waifu_router(
             relation=user.relation
         )
 
-    @router.get("/waifu/{waifu_id}", response_model=GetWaifuResponse)
+    @router.get("/waifu/{waifu_id}", response_model=GetWaifuResponse, summary="Get specified waifu info.", tags=["Waifu management"])
     async def get_waifu_by_id(
         waifu_id: str,
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
@@ -174,7 +210,7 @@ def get_waifu_router(
             metadata=waifu.metadata
         )
 
-    @router.get("/waifu", response_model=GetWaifuResponse)
+    @router.get("/waifu", response_model=GetWaifuResponse, summary="Get current waifu info.", tags=["Waifu management"])
     async def get_waifu(
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
     ):
@@ -187,7 +223,7 @@ def get_waifu_router(
 
         return await get_waifu_by_id(waifu.waifu_id, credentials)
 
-    @router.get("/waifus", response_model=GetWaifusResponse)
+    @router.get("/waifus", response_model=GetWaifusResponse, summary="List waifus.", tags=["Waifu management"])
     async def get_waifus(
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
     ):
@@ -204,7 +240,7 @@ def get_waifu_router(
             metadata=w.metadata
         ) for w in waifu_repo.get_waifus()])
 
-    @router.post("/waifu", response_model=PostWaifuResponse)
+    @router.post("/waifu", response_model=PostWaifuResponse, summary="Update waifu info.", tags=["Waifu management"])
     async def post_waifu(
         request: PostWaifuRequest,
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
@@ -225,7 +261,7 @@ def get_waifu_router(
             metadata=request.metadata
         )
 
-    @router.delete("/waifu/{waifu_id}")
+    @router.delete("/waifu/{waifu_id}", summary="Delete waifu.", tags=["Waifu management"])
     async def delete_waifu(
         waifu_id: str,
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
@@ -254,7 +290,7 @@ def get_waifu_router(
             metadata=waifu.metadata
         )
 
-    @router.post("/waifu/icon")
+    @router.post("/waifu/icon", summary="Update waifu icon.", tags=["Waifu management"])
     async def post_waifu_icon(
         waifu_id: str = Form(...),
         icon: UploadFile = File(...),
@@ -278,7 +314,7 @@ def get_waifu_router(
 
         return JSONResponse(content={"result": "success"})
 
-    @router.post("/waifu/create")
+    @router.post("/waifu/create", summary="Create new waifu.", tags=["Waifu management"])
     async def post_waifu_create(
         request: PostWaifuCreateRequest,
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
@@ -315,7 +351,7 @@ def get_waifu_router(
                 if t == "final":
                     return r
 
-    @router.post("/waifu/activate")
+    @router.post("/waifu/activate", summary="Activate waifu.", tags=["Waifu management"])
     async def post_waifu_activate(
         request: PostWaifuActivateRequest,
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
@@ -329,7 +365,106 @@ def get_waifu_router(
 
         return await waifu_service.activate(request.waifu_id)
 
-    @router.post("/cli-web-bridge/start", response_model=PostCliWebBridgeResponse)
+    @router.post("/weekly_plan/generate", summary="Generate weekly plan.", response_model=PostWeeklyPlanGenerateResponse, tags=["Weely Plan"])
+    async def post_weekly_plan_generate(
+        request: PostWeeklyPlanGenerateRequest,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        weekly_plan = await waifu_service.prompt_builder.generate_weekly_plan_prompt(
+            waifu_id=request.waifu_id,
+            character_prompt=waifu_service.prompt_builder.get_character_prompt(waifu_id=request.waifu_id)
+        )
+        return PostWeeklyPlanGenerateResponse(weekly_plan_prompt=weekly_plan)
+
+    @router.get("/weekly_plan/{waifu_id}", summary="Get weekly plan.", response_model=GetWeeklyPlanResponse, tags=["Weely Plan"])
+    async def get_weekly_plan(
+        waifu_id: str,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        weekly_plan = waifu_service.prompt_builder.get_weekly_plan_prompt(waifu_id=waifu_id)
+        return GetWeeklyPlanResponse(weekly_plan_prompt=weekly_plan)
+
+    @router.post("/weekly_plan", summary="Update weekly plan.", response_model=PostWeeklyPlanResponse, tags=["Weely Plan"])
+    async def post_weekly_plan(
+        request: PostWeeklyPlanRequest,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        weekly_plan = waifu_service.prompt_builder.update_weekly_plan_prompt(
+            waifu_id=request.waifu_id,
+            weekly_plan_prompt=request.weekly_plan_prompt
+        )
+        return PostWeeklyPlanResponse(weekly_plan_prompt=weekly_plan)
+
+    @router.post("/daily_plan/generate", summary="Generate daily plan.", response_model=PostDailyPlanGenerateResponse, tags=["Daily Plan"])
+    async def post_daily_plan_generate(
+        request: PostDailyPlanGenerateRequest,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        target_date_datetime = datetime.combine(
+            date.fromisoformat(request.target_date),
+            time(0, 0),
+            tzinfo=ZoneInfo(waifu_service.timezone)
+        ) if request.target_date else None
+        daily_plan = await waifu_service.prompt_builder.generate_daily_plan_prompt(
+            waifu_id=request.waifu_id,
+            additional_contents=request.additional_contents or [],
+            target_date=target_date_datetime
+        )
+        return PostDailyPlanGenerateResponse(daily_plan_prompt=daily_plan)
+
+    @router.get("/daily_plan/{waifu_id}/{target_date}", summary="Get daily plan.", response_model=GetDailyPlanResponse, tags=["Daily Plan"])
+    async def get_daily_plan(
+        waifu_id: str,
+        target_date: str,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        daily_plan = waifu_service.prompt_builder.get_daily_plan_prompt(
+            waifu_id=waifu_id,
+            target_date=datetime.combine(
+                date.fromisoformat(target_date),
+                time(0, 0),
+                tzinfo=ZoneInfo(waifu_service.timezone)
+            )
+        )
+        if not daily_plan:
+            return JSONResponse(content={"error": f"Daily plan not found for: waifu_id={waifu_id}, target_date={target_date}"}, status_code=404)
+        return GetDailyPlanResponse(daily_plan_prompt=daily_plan)
+
+    @router.post("/daily_plan", summary="Update daily plan.", response_model=PostDailyPlanResponse, tags=["Daily Plan"])
+    async def post_daily_plan(
+        request: PostDailyPlanRequest,
+        credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+    ):
+        if http_adapter.api_key:
+            http_adapter.api_key_auth(credentials)
+
+        daily_plan = waifu_service.prompt_builder.update_daily_plan_prompt(
+            waifu_id=request.waifu_id,
+            daily_plan_prompt=request.daily_plan_prompt,
+            target_date=datetime.combine(
+                date.fromisoformat(request.target_date),
+                time(0, 0),
+                tzinfo=ZoneInfo(waifu_service.timezone)
+            ) if request.target_date else None
+        )
+        return PostDailyPlanResponse(daily_plan_prompt=daily_plan)
+
+    @router.post("/cli-web-bridge/start", summary="Issue code to share context from CLI to web browser.", response_model=PostCliWebBridgeResponse, tags=["CLI"])
     async def post_cli_web_bridge_start(request: PostCliWebBridgeRequest):
         user_id = request.user_id
         if not user_id or not isinstance(user_id, str):
@@ -343,7 +478,7 @@ def get_waifu_router(
         link = f"/cli-web-bridge/open?code={code}"
         return PostCliWebBridgeResponse(link=link)
 
-    @router.get("/cli-web-bridge/open", response_class=HTMLResponse)
+    @router.get("/cli-web-bridge/open", summary="HTML response to ", response_class=HTMLResponse, tags=["CLI"])
     async def get_cli_web_bridge_open(code: str):
         token = cli_web_bridge_tokens[code]
         now = datetime.now(timezone.utc)
