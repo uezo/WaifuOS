@@ -209,7 +209,7 @@ class WaifuService:
         if not self.prompt_builder.get_daily_plan_prompt_path(waifu_id=waifu_id).exists():
             today = datetime.now(ZoneInfo(self.timezone))
             yesterday = today - timedelta(days=1)
-            last_diary = self.diary_manager.get_diary(
+            last_diary = await self.diary_manager.get_diary(
                 waifu.waifu_id,
                 target_date=yesterday
             ) or "## 昨日の日記\n\n記録なし"

@@ -62,6 +62,7 @@ AIAVATAR_LONGTERM_MEMORY_ENABLED = os.getenv("AIAVATAR_LONGTERM_MEMORY_ENABLED",
 # -------------------------------------------------------------------
 
 # Shared components
+chat_memory_client = ChatMemoryClient(base_url="http://chatmemory:8000") if AIAVATAR_LONGTERM_MEMORY_ENABLED else None
 user_repo = UserRepository(connection_str=f"{DATA_DIR}/user.db")
 waifu_repo = WaifuRepository(connection_str=f"{DATA_DIR}/waifu.db")
 context_repo = ContextRepository(connection_str=f"{DATA_DIR}/context.db")
@@ -75,7 +76,7 @@ prompt_builder = PromptBuilder(
     timezone=TIMEZONE
 )
 diary_manager = DiaryManager(
-    data_dir=DATA_DIR,
+    chat_memory_client=chat_memory_client,
     openai_api_key=OPENAI_API_KEY,
     openai_base_url=OPENAI_BASE_URL,
     openai_model=OPENAI_MODEL,
@@ -95,7 +96,6 @@ waifu_service = WaifuService(
 )
 sts_manager = STSPipelineManager(waifu_service=waifu_service)
 vad, stt, llm, tts, session_state_manager, performance_recorder = sts_manager.get_pipeline_components()
-chat_memory_client = ChatMemoryClient(base_url="http://chatmemory:8000") if AIAVATAR_LONGTERM_MEMORY_ENABLED else None
 
 # Waifu activation
 @waifu_service.on_waifu_activated
@@ -339,6 +339,6 @@ waifu_router = get_waifu_router(
 )
 app.include_router(ws_router, prefix="/ws")
 app.include_router(http_router, prefix="/api", tags=["Conversation"])
-app.include_router(waifu_router, prefix="/api", tags=["Waifu management"])
+app.include_router(waifu_router, prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/waifus", StaticFiles(directory="/data/waifus"), name="waifus")

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -75,6 +76,7 @@ class ChatMemoryClient:
             logger.exception(f"Error at search ChatMemory: {ex}")
             raise ex
 
+    # Message history
     async def add_messages(self, request: STSRequest, response: STSResponse, waifu_id: str):
         if not request.user_id or not request.context_id or not request.text or not response.voice_text or not waifu_id:
             return
@@ -109,3 +111,26 @@ class ChatMemoryClient:
 
     async def enqueue_messages(self, request: STSRequest, response: STSResponse, waifu_id: str):
         await self._queue.put((request, response, waifu_id))
+
+    # Diary
+    async def get_diary(self, waifu_id: str, target_date: datetime) -> str:
+        resp = await self.http_client.get(
+            url=f"{self.base_url}/diary",
+            params={
+                "user_id": waifu_id,
+                "diary_date": target_date.strftime("%Y-%m-%d")
+            }
+        )
+        logger.warning(resp.json())
+        return resp.json()["diaries"][0]["content"]
+
+    async def update_diary(self, waifu_id: str, content: str, target_date: datetime):
+        resp = await self.http_client.post(
+            url=f"{self.base_url}/diary",
+            json={
+                "user_id": waifu_id,
+                "content": content,
+                "diary_date": target_date.strftime("%Y-%m-%d")
+            }
+        )
+        return resp.json()
