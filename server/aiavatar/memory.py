@@ -39,16 +39,17 @@ class ChatMemoryClient:
             )
         )
         self.debug = debug
+        self.debug = True
 
         self._queue: asyncio.Queue[Tuple[STSRequest, STSResponse]] = asyncio.Queue()
         self._worker_task = asyncio.create_task(self._process_queue())
 
-    async def search(self, user_id: str, waifu_id: str, query: str) -> SearchResult:
+    async def search(self, user_id: str, waifu_id: str, query: str, since: str = None, until: str = None) -> SearchResult:
         if not user_id or not waifu_id or not query:
             return SearchResult(answer=None, retrieved_data=None)
 
         if self.debug:
-            logger.info(f"ChatMemory.search: user_id={user_id} / query={query}")
+            logger.info(f"ChatMemory.search: user_id={user_id} / query={query} / since={since} / until={until}")
 
         try:
             resp = await self.http_client.post(
@@ -58,7 +59,9 @@ class ChatMemoryClient:
                     "query": query,
                     "top_k": self.top_k,
                     "search_content": self.search_content,
-                    "include_retrieved_data": self.include_retrieved_data
+                    "include_retrieved_data": self.include_retrieved_data,
+                    "since": since,
+                    "until": until
                 }
             )
             resp.raise_for_status()

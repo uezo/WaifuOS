@@ -34,6 +34,6 @@ app = FastAPI(
     title="ChatMemory",
     openapi_url="/chatmemory/openapi.json",
     servers=[{"url": "/chatmemory"}],
-    version="0.2.6"
+    version="0.2.8"
 )
 app.include_router(cm.get_router())

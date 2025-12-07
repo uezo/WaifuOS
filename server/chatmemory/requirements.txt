@@ -1,2 +1,2 @@
 python-dotenv>=1.0.0
-chatmemory>=0.2.6
+chatmemory>=0.2.8

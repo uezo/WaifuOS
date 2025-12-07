@@ -305,7 +305,9 @@ class RetrieveMemoryTool(Tool):
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": {"type": "string"}
+                            "query": {"type": "string"},
+                            "since": {"type": "string", "description": "Start date (inclusive) of the data range to search. YYYY-MM-DD format. Date only."},
+                            "until": {"type": "string", "description": "End date (inclusive) of the data range to search. YYYY-MM-DD format. Date only."}
                         },
                         "required": ["query"]
                     },
@@ -316,12 +318,14 @@ class RetrieveMemoryTool(Tool):
             is_dynamic
         )
 
-    async def search_memory(self, query: str, metadata: dict = None):
+    async def search_memory(self, query: str, since: str = None, until: str = None, metadata: dict = None):
         logger.info(f"Search memory: {query}")
         result = await self.chat_memory_client.search(
             user_id=metadata["user_id"],
             waifu_id=self.waifu_service.current_waifu.waifu_id,
-            query=query
+            query=query,
+            since=since,
+            until=until
         )
         logger.info(f"Search memory result: {result.__dict__}")
         return result.__dict__
