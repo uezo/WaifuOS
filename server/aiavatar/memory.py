@@ -39,7 +39,6 @@ class ChatMemoryClient:
             )
         )
         self.debug = debug
-        self.debug = True
 
         self._queue: asyncio.Queue[Tuple[STSRequest, STSResponse]] = asyncio.Queue()
         self._worker_task = asyncio.create_task(self._process_queue())
